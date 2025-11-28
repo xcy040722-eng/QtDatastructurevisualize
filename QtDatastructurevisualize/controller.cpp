@@ -1,83 +1,138 @@
 ﻿#include "controller.h"
 #include "basescene.h"
-#include "arraylistmodel.h"
-#include "stackmodel.h"
-#include "linkedlistmodel.h"
+#include "linearlistscene.h"
+#include "controlpanel.h"
 #include <QDebug>
 
-Controller::Controller(BaseScene* scene, QObject* parent)
-    : QObject(parent), m_scene(scene) {
-    ensureModels();
-    // bind models -> scene
-    if (m_linkedModel) {
-        connect(m_linkedModel, &LinkedListModel::nodeInserted, m_scene, &BaseScene::onNodeInserted);
-        connect(m_linkedModel, &LinkedListModel::nodeDeleted, m_scene, &BaseScene::onNodeDeleted);
-        connect(m_linkedModel, &LinkedListModel::listCleared, m_scene, &BaseScene::onListCleared);
+Controller::Controller(BaseScene* scene, ControlPanel* panel, QObject* parent)
+    : QObject(parent), m_scene(scene), m_panel(panel)
+{
+    connect(m_panel, &ControlPanel::insertRequested, this, &Controller::onInsertRequested);
+    connect(m_panel, &ControlPanel::removeRequested, this, &Controller::onRemoveRequested);
+    connect(m_panel, &ControlPanel::findRequested, this, &Controller::onFindRequested);
+    connect(m_panel, &ControlPanel::resetRequested, this, &Controller::onResetRequested);
+    connect(m_panel, &ControlPanel::structureChanged, this, &Controller::onStructureChanged);
+
+    if (m_scene) {
+        connect(m_scene, &BaseScene::animationFinished, this, &Controller::onAnimationFinished);
     }
-    if (m_arrayModel) {
-        connect(m_arrayModel, &ArrayListModel::nodeInserted, m_scene, &BaseScene::onNodeInserted);
-        connect(m_arrayModel, &ArrayListModel::nodeDeleted, m_scene, &BaseScene::onNodeDeleted);
-        connect(m_arrayModel, &ArrayListModel::listCleared, m_scene, &BaseScene::onListCleared);
-    }
-    if (m_stackModel) {
-        connect(m_stackModel, &StackModel::nodePushed, m_scene, &BaseScene::onNodeInserted);
-        connect(m_stackModel, &StackModel::nodePopped, m_scene, &BaseScene::onNodeDeleted);
-        connect(m_stackModel, &StackModel::stackCleared, m_scene, &BaseScene::onListCleared);
+    else {
+        qDebug() << "CRITICAL ERROR: Scene is null in Controller constructor!";
     }
 }
 
-void Controller::ensureModels() {
-    if (!m_arrayModel) m_arrayModel = new ArrayListModel(this);
-    if (!m_linkedModel) m_linkedModel = new LinkedListModel(this);
-    if (!m_stackModel) m_stackModel = new StackModel(this);
+void Controller::lockUI() {
+    m_isAnimating = true;
+    m_panel->setButtonsEnabled(false);
+    qDebug() << "UI Locked";
 }
 
-int Controller::toIntOrWarn(const QString& s) {
-    bool ok = false;
-    int v = s.toInt(&ok);
-    if (!ok) { qDebug() << "请输入整数"; return INT_MIN; }
-    return v;
+void Controller::unlockUI() {
+    m_isAnimating = false;
+    m_panel->setButtonsEnabled(true);
+    qDebug() << "UI Unlocked";
 }
 
-void Controller::onInsertRequested(const QString& value) {
-    int v = toIntOrWarn(value); if (v == INT_MIN) return;
-    ensureModels();
-    switch (m_struct) {
-    case LINKED: m_linkedModel->insertNode(v); break;
-    case ARRAY: m_arrayModel->insertNode(v); break;
-    case STACK: m_stackModel->push(v); break;
-    }
-}
-
-void Controller::onRemoveRequested(const QString& value) {
-    int v = toIntOrWarn(value); if (v == INT_MIN) return;
-    switch (m_struct) {
-    case LINKED: m_linkedModel->deleteNode(v); break;
-    case ARRAY: m_arrayModel->deleteNode(v); break;
-    case STACK: m_stackModel->popValue(v); break;
-    }
-}
-
-void Controller::onFindRequested(const QString& value) {
-    int v = toIntOrWarn(value); if (v == INT_MIN) return;
-    bool found = false;
-    switch (m_struct) {
-    case LINKED: found = m_linkedModel->contains(v); break;
-    case ARRAY: found = m_arrayModel->contains(v); break;
-    case STACK: found = m_stackModel->contains(v); break;
-    }
-    qDebug() << (found ? "Found:" : "Not found:") << v;
-}
-
-void Controller::onResetRequested() {
-    if (m_linkedModel) m_linkedModel->clearList();
-    if (m_arrayModel) m_arrayModel->clearList();
-    if (m_stackModel) m_stackModel->clearStack();
+void Controller::onAnimationFinished() {
+    unlockUI();
 }
 
 void Controller::onStructureChanged(int idx) {
-    if (idx < 0 || idx>2) return;
-    m_struct = static_cast<StructType>(idx);
-    // let scene know to render different layout style
-    if (m_scene) m_scene->setStructureType(idx);
+    if (idx < 0 || idx > 2) return;
+
+    unlockUI();
+
+    m_data.clear();
+    m_currentType = static_cast<StructType>(idx);
+
+    LinearListScene* ls = dynamic_cast<LinearListScene*>(m_scene);
+    if (ls) {
+        ls->setStructureType(static_cast<LinearListScene::StructureType>(idx));
+        qDebug() << "Switched to structure type:" << idx << ". Data cleared.";
+    }
+    else {
+        qDebug() << "ERROR: Scene is not LinearListScene!";
+    }
+}
+
+void Controller::onResetRequested() {
+    m_data.clear();
+    m_scene->reset();
+    unlockUI();
+    qDebug() << "Reset all.";
+}
+
+int Controller::findIndex(int value) {
+    for (size_t i = 0; i < m_data.size(); ++i) {
+        if (m_data[i] == value) return i;
+    }
+    return -1;
+}
+
+void Controller::onInsertRequested(const QString& valueStr) {
+    qDebug() << "Insert Requested:" << valueStr;
+
+    bool ok;
+    int val = valueStr.toInt(&ok);
+    if (!ok) {
+        qDebug() << "Invalid integer input";
+        return;
+    }
+    if (m_isAnimating) {
+        qDebug() << "Ignored: Animation in progress";
+        return;
+    }
+
+    if (findIndex(val) != -1) {
+        qDebug() << "Value already exists";
+        return;
+    }
+
+    lockUI();
+
+    int index = 0;
+    if (m_currentType == LINKED || m_currentType == ARRAY) {
+        index = m_data.size(); // 尾插
+        m_data.push_back(val);
+    }
+    else if (m_currentType == STACK) {
+        index = m_data.size(); // 栈顶
+        m_data.push_back(val);
+    }
+
+    qDebug() << "Invoking scene insert: val=" << val << " idx=" << index;
+    m_scene->insertNodeAnimated(val, index);
+}
+
+void Controller::onRemoveRequested(const QString& valueStr) {
+    qDebug() << "Remove Requested:" << valueStr;
+
+    bool ok;
+    int val = valueStr.toInt(&ok);
+    if (!ok || m_isAnimating) return;
+
+    int index = findIndex(val);
+    if (index == -1) {
+        qDebug() << "Value not found";
+        return;
+    }
+
+    lockUI();
+    m_data.erase(m_data.begin() + index);
+    m_scene->removeNodeAnimated(val, index);
+}
+
+void Controller::onFindRequested(const QString& valueStr) {
+    bool ok;
+    int val = valueStr.toInt(&ok);
+    if (!ok || m_isAnimating) return;
+
+    int index = findIndex(val);
+    if (index != -1) {
+        lockUI();
+        m_scene->searchNodeAnimated(val, index);
+    }
+    else {
+        qDebug() << "Not found";
+    }
 }

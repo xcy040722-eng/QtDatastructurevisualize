@@ -1,14 +1,15 @@
 #pragma once
 #include <QWidget>
+
 class QComboBox;
 class QLineEdit;
 class QPushButton;
-class QSlider;
 
 class ControlPanel : public QWidget {
     Q_OBJECT
 public:
     explicit ControlPanel(QWidget* parent = nullptr);
+    void setButtonsEnabled(bool enable);
 
 signals:
     void insertRequested(const QString& value);

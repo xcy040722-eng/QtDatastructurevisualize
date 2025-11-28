@@ -1,206 +1,244 @@
 #include "linearlistscene.h"
-#include <QBrush>
-#include <QPen>
+#include <QPropertyAnimation>
+#include <QSequentialAnimationGroup>
 #include <QVariantAnimation>
-#include <QDebug>
-#include <QtMath>
 #include <QTimer>
+#include <QDebug>
+#include <QPen>
+#include <QBrush>
+#include <QtMath>
 
 LinearListScene::LinearListScene(QObject* parent) : BaseScene(parent) {
-    setStructureType(0);
+    setSceneRect(0, 0, 1200, 800);
 }
 
-void LinearListScene::setStructureType(int type) {
-    m_struct = type;
-    // adjust scene rect or base coordinates if desired
-    if (m_struct == 2) { // stack: show vertical layout
-        setSceneRect(0, 0, 600, 800);
+void LinearListScene::setStructureType(StructureType type) {
+    qDebug() << "[Scene] Setting structure type to:" << type;
+    reset(); // 切换类型前必须重置
+    m_type = type;
+    update();
+}
+
+void LinearListScene::reset() {
+    qDebug() << "[Scene] Resetting...";
+    cleanAllGraphics();
+    m_dataList.clear();
+
+    if (m_probeRect) {
+        removeItem(m_probeRect);
+        delete m_probeRect;
+        m_probeRect = nullptr;
+    }
+    update();
+}
+
+void LinearListScene::cleanAllGraphics() {
+    for (auto* node : m_visualNodes) {
+        if (node->rect) { removeItem(node->rect); delete node->rect; }
+        if (node->arrow) { removeItem(node->arrow); delete node->arrow; }
+        delete node;
+    }
+    m_visualNodes.clear();
+}
+
+QPointF LinearListScene::getNodePos(int index) {
+    if (m_type == STACK) {
+        // 栈：垂直向上生长
+        return QPointF(START_X + 200, START_Y + 300 - index * (NODE_H + 5));
     }
     else {
-        setSceneRect(0, 0, 1200, 600);
+        // 链表/顺序表：水平排列
+        return QPointF(START_X + index * (NODE_W + GAP), START_Y);
     }
-    layoutNodesWithAnimation();
 }
 
-void LinearListScene::onNodeInserted(int value) {
-    if (m_items.contains(value)) {
-        qDebug() << "[Scene] value exists:" << value;
+void LinearListScene::createProbe() {
+    if (m_probeRect) return;
+    m_probeRect = addRect(0, 0, NODE_W + 10, NODE_H + 10, QPen(Qt::red, 3));
+    m_probeRect->setZValue(999);
+    m_probeRect->setVisible(false);
+}
+
+// === 动画步骤 1: 查找 ===
+void LinearListScene::animStepSearch(int targetIndex, std::function<void()> onFinished) {
+    if (m_type == STACK || targetIndex < 0) {
+        onFinished();
         return;
     }
-    // add to order list (for array/linked we append)
-    if (m_struct == 2) {
-        // Stack: push to top
-        m_order.append(value);
-    }
-    else {
-        m_order.append(value);
-    }
-    // create graphic at above position and animate to final place
-    createNodeGraphics(value, START_X, -100);
-    layoutNodesWithAnimation();
-}
 
-void LinearListScene::onNodeDeleted(int value) {
-    if (!m_items.contains(value)) {
-        qDebug() << "[Scene] delete: not found" << value;
-        return;
-    }
-    removeNodeGraphics(value);
-    m_order.removeAll(value);
-    layoutNodesWithAnimation();
-}
+    qDebug() << "[Scene] Starting search animation to index:" << targetIndex;
+    createProbe();
+    m_probeRect->setVisible(true);
 
-void LinearListScene::onListCleared() {
-    // delete all
-    for (auto it = m_items.begin(); it != m_items.end(); ++it) {
-        if (it->arrow) { removeItem(it->arrow); delete it->arrow; it->arrow = nullptr; }
-        if (it->text) { removeItem(it->text); delete it->text; it->text = nullptr; }
-        if (it->rect) { removeItem(it->rect); delete it->rect; it->rect = nullptr; }
-    }
-    m_items.clear();
-    m_order.clear();
-}
+    QPointF startPos = getNodePos(0) - QPointF(5, 5);
+    m_probeRect->setPos(startPos);
 
-void LinearListScene::createNodeGraphics(int value, qreal startX, qreal startY) {
-    QBrush brush(Qt::yellow);
-    QPen pen(Qt::black);
-    auto rect = addRect(0, 0, NODE_W, NODE_H, pen, brush);
-    rect->setZValue(1);
-    rect->setPos(startX, startY);
+    QSequentialAnimationGroup* group = new QSequentialAnimationGroup(this);
 
-    auto text = addSimpleText(QString::number(value));
-    text->setParentItem(rect);
-    // center text
-    QRectF tb = text->boundingRect();
-    text->setPos((NODE_W - tb.width()) / 2.0, (NODE_H - tb.height()) / 2.0);
-    text->setZValue(2);
+    int steps = m_dataList.isEmpty() ? 0 : qMin(targetIndex, m_dataList.size());
 
-    NodeGraphics ng;
-    ng.rect = rect; ng.text = text; ng.value = value;
-    ng.arrow = nullptr;
-    m_items[value] = ng;
-}
+    for (int i = 0; i <= steps; ++i) {
+        QPointF targetPos = getNodePos(i) - QPointF(5, 5);
+        QPointF stepStart = (i == 0) ? targetPos : (getNodePos(i - 1) - QPointF(5, 5));
 
-void LinearListScene::removeNodeGraphics(int value) {
-    if (!m_items.contains(value)) return;
-    NodeGraphics ng = m_items[value];
-    if (ng.arrow) { removeItem(ng.arrow); delete ng.arrow; ng.arrow = nullptr; }
-    if (ng.text) { // child of rect so will be deleted with rect, but safe
-        removeItem(ng.text);
-        delete ng.text; ng.text = nullptr;
-    }
-    if (ng.rect) {
-        removeItem(ng.rect);
-        delete ng.rect; ng.rect = nullptr;
-    }
-    m_items.remove(value);
-}
+        QVariantAnimation* anim = new QVariantAnimation(group);
+        anim->setDuration(400);
+        anim->setStartValue(stepStart);
+        anim->setEndValue(targetPos);
+        anim->setEasingCurve(QEasingCurve::InOutQuad);
 
-void LinearListScene::rebuildArrows() {
-    // remove existing arrows first
-    for (auto it = m_items.begin(); it != m_items.end(); ++it) {
-        if (it->arrow) { removeItem(it->arrow); delete it->arrow; it->arrow = nullptr; }
-    }
-    if (m_struct == 2) return; // stack doesn't need arrows
-    // draw arrow from item i -> i+1
-    for (int i = 0; i < m_order.size() - 1; ++i) {
-        int v1 = m_order[i];
-        int v2 = m_order[i + 1];
-        if (!m_items.contains(v1) || !m_items.contains(v2)) continue;
-        auto r1 = m_items[v1].rect;
-        auto r2 = m_items[v2].rect;
-        QPointF p1 = r1->pos() + QPointF(NODE_W, NODE_H / 2.0);
-        QPointF p2 = r2->pos() + QPointF(0, NODE_H / 2.0);
-        QGraphicsLineItem* line = addLine(QLineF(p1, p2), QPen(Qt::black, 2));
-        line->setZValue(0.5);
-        // draw simple triangular arrow head
-        QPolygonF poly;
-        const qreal arrowSize = 8;
-        QLineF ln(p1, p2);
-        double angle = ln.angle() * M_PI / 180.0;
-        QPointF pHead = p2;
-        QPointF pA = pHead + QPointF(qCos(angle + M_PI / 6) * arrowSize, -qSin(angle + M_PI / 6) * arrowSize);
-        QPointF pB = pHead + QPointF(qCos(angle - M_PI / 6) * arrowSize, -qSin(angle - M_PI / 6) * arrowSize);
-        poly << pHead << pA << pB;
-        QGraphicsPolygonItem* head = addPolygon(poly, QPen(Qt::black), QBrush(Qt::black));
-        head->setZValue(0.5);
-        // group arrow: use a line pointer stored in first node (for removal later we only store pointer to line)
-        m_items[v1].arrow = line;
-        // Note: head is not tracked individually to keep code short; it's safe because it persists as scene item
-    }
-}
-
-void LinearListScene::simpleLayout() {
-    if (m_struct == 2) {
-        // stack vertical: top at START_X, START_Y
-        int x = START_X;
-        int y = START_Y;
-        // draw from top (last pushed at top end)
-        for (int i = m_order.size() - 1; i >= 0; --i) {
-            int v = m_order[i];
-            if (!m_items.contains(v)) continue;
-            m_items[v].rect->setPos(x, y);
-            y += NODE_H + GAP;
-        }
-    }
-    else {
-        // horizontal layout left to right in insertion order
-        int x = START_X;
-        int y = START_Y;
-        for (int v : m_order) {
-            if (!m_items.contains(v)) continue;
-            m_items[v].rect->setPos(x, y);
-            x += NODE_W + GAP;
-        }
-    }
-    rebuildArrows();
-}
-
-void LinearListScene::layoutNodesWithAnimation() {
-    // animate every node from current pos to target pos
-    // compute target positions
-    QMap<int, QPointF> targetPos;
-    if (m_struct == 2) {
-        // stack: top at START_X/START_Y
-        int x = START_X;
-        int y = START_Y;
-        for (int i = m_order.size() - 1; i >= 0; --i) {
-            int v = m_order[i];
-            targetPos[v] = QPointF(x, y);
-            y += NODE_H + GAP;
-        }
-    }
-    else {
-        int x = START_X;
-        int y = START_Y;
-        for (int v : m_order) {
-            targetPos[v] = QPointF(x, y);
-            x += NODE_W + GAP;
-        }
-    }
-
-    // For any items not existing in m_items (shouldn't happen) skip
-    // Animate: for each item, create QVariantAnimation updating pos
-    const int duration = 400;
-    for (auto it = m_items.begin(); it != m_items.end(); ++it) {
-        int v = it.key();
-        auto rect = it->rect;
-        if (!rect) continue;
-        QPointF from = rect->pos();
-        QPointF to = targetPos.contains(v) ? targetPos[v] : from;
-        if (from == to) continue;
-        QVariantAnimation* anim = new QVariantAnimation(this);
-        anim->setDuration(duration);
-        anim->setStartValue(from);
-        anim->setEndValue(to);
-        connect(anim, &QVariantAnimation::valueChanged, this, [rect](const QVariant& val) {
-            QPointF p = val.toPointF();
-            rect->setPos(p);
+        // 关键点：[this] 捕获，修复编译错误
+        connect(anim, &QVariantAnimation::valueChanged, this, [this](const QVariant& val) {
+            if (m_probeRect) m_probeRect->setPos(val.toPointF());
             });
-        connect(anim, &QVariantAnimation::finished, anim, &QObject::deleteLater);
-        anim->start();
+
+        group->addAnimation(anim);
+        if (i < steps) group->addPause(100);
     }
 
-    // After short delay, rebuild arrows (we can delay by same duration)
-    QTimer::singleShot(duration + 30, this, [this]() { rebuildArrows(); });
+    connect(group, &QAbstractAnimation::finished, this, [this, onFinished, group]() {
+        qDebug() << "[Scene] Search finished";
+        if (m_probeRect) m_probeRect->setVisible(false);
+        onFinished();
+        group->deleteLater();
+        });
+
+    group->start();
+}
+
+// === 动画步骤 2: 插入 ===
+void LinearListScene::insertNodeAnimated(int value, int index) {
+    qDebug() << "[Scene] insertNodeAnimated called. Value:" << value << " Index:" << index;
+
+    animStepSearch(index, [this, value, index]() {
+
+        NodeGraphics* ng = new NodeGraphics();
+        QPen pen(Qt::black);
+        QBrush brush(Qt::yellow);
+
+        if (m_type == ARRAY_LIST) brush.setColor(QColor(200, 230, 255));
+        if (m_type == STACK) brush.setColor(QColor(180, 255, 180));
+
+        ng->rect = addRect(0, 0, NODE_W, NODE_H, pen, brush);
+        ng->value = value;
+
+        QPointF finalPos = getNodePos(index);
+        QPointF startPos = finalPos - QPointF(0, 150);
+
+        ng->rect->setPos(startPos);
+        ng->rect->setOpacity(0);
+
+        ng->text = new QGraphicsSimpleTextItem(QString::number(value), ng->rect);
+        auto b = ng->text->boundingRect();
+        ng->text->setPos((NODE_W - b.width()) / 2, (NODE_H - b.height()) / 2);
+
+        if (m_type == LINKED_LIST) {
+            QGraphicsLineItem* split = new QGraphicsLineItem(NODE_W * 0.7, 0, NODE_W * 0.7, NODE_H, ng->rect);
+            (void)split;
+        }
+
+        m_visualNodes[value] = ng;
+        m_dataList.insert(index, value);
+
+        QVariantAnimation* vAnim = new QVariantAnimation(this);
+        vAnim->setDuration(600);
+        vAnim->setStartValue(startPos);
+        vAnim->setEndValue(finalPos);
+        vAnim->setEasingCurve(QEasingCurve::OutBounce);
+
+        // 关键点：[this] 捕获
+        connect(vAnim, &QVariantAnimation::valueChanged, this, [this, ng](const QVariant& val) {
+            if (ng && ng->rect) {
+                ng->rect->setPos(val.toPointF());
+                ng->rect->setOpacity(1.0);
+            }
+            });
+
+        connect(vAnim, &QVariantAnimation::finished, this, [this]() {
+            updateArrows();
+
+            if (m_type == ARRAY_LIST) {
+                for (int i = 0; i < m_dataList.size(); ++i) {
+                    int v = m_dataList[i];
+                    if (m_visualNodes.contains(v)) {
+                        m_visualNodes[v]->rect->setPos(getNodePos(i));
+                    }
+                }
+            }
+            emit animationFinished();
+            });
+
+        vAnim->start();
+        });
+}
+
+void LinearListScene::removeNodeAnimated(int value, int index) {
+    qDebug() << "[Scene] removeNodeAnimated called. Value:" << value;
+
+    animStepSearch(index, [this, value, index]() {
+        if (!m_visualNodes.contains(value)) {
+            emit animationFinished();
+            return;
+        }
+
+        NodeGraphics* ng = m_visualNodes[value];
+
+        QVariantAnimation* vAnim = new QVariantAnimation(this);
+        vAnim->setDuration(500);
+        vAnim->setStartValue(1.0);
+        vAnim->setEndValue(0.0);
+
+        connect(vAnim, &QVariantAnimation::valueChanged, this, [this, ng](const QVariant& val) {
+            if (ng && ng->rect) {
+                qreal s = val.toReal();
+                ng->rect->setOpacity(s);
+                ng->rect->setScale(s);
+                ng->rect->setTransformOriginPoint(NODE_W / 2, NODE_H / 2);
+            }
+            });
+
+        connect(vAnim, &QVariantAnimation::finished, this, [this, value, index, ng]() {
+            if (ng->rect) delete ng->rect;
+            if (ng->arrow) delete ng->arrow;
+            delete ng;
+            m_visualNodes.remove(value);
+            m_dataList.removeAt(index);
+
+            if (m_type == ARRAY_LIST || m_type == LINKED_LIST) {
+                for (int i = 0; i < m_dataList.size(); ++i) {
+                    int v = m_dataList[i];
+                    if (m_visualNodes.contains(v)) {
+                        m_visualNodes[v]->rect->setPos(getNodePos(i));
+                        m_visualNodes[v]->rect->setScale(1.0);
+                        m_visualNodes[v]->rect->setOpacity(1.0);
+                    }
+                }
+            }
+            updateArrows();
+            emit animationFinished();
+            });
+        vAnim->start();
+        });
+}
+
+void LinearListScene::updateArrows() {
+    for (auto* node : m_visualNodes) {
+        if (node->arrow) { delete node->arrow; node->arrow = nullptr; }
+    }
+
+    if (m_type != LINKED_LIST) return;
+
+    for (int i = 0; i < m_dataList.size() - 1; ++i) {
+        int v1 = m_dataList[i];
+        int v2 = m_dataList[i + 1];
+
+        if (!m_visualNodes.contains(v1) || !m_visualNodes.contains(v2)) continue;
+
+        QPointF start = m_visualNodes[v1]->rect->pos() + QPointF(NODE_W, NODE_H / 2);
+        QPointF end = m_visualNodes[v2]->rect->pos() + QPointF(0, NODE_H / 2);
+
+        QGraphicsLineItem* line = addLine(QLineF(start, end), QPen(Qt::black, 2));
+        line->setZValue(-1);
+        m_visualNodes[v1]->arrow = line;
+    }
 }

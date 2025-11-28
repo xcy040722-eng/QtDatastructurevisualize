@@ -13,56 +13,64 @@ ControlPanel::ControlPanel(QWidget* parent) : QWidget(parent) {
 }
 
 void ControlPanel::setupUi() {
-    m_structCombo = new QComboBox(this);
-    m_structCombo->addItem(u8"链表 (Linked List)");
-    m_structCombo->addItem(u8"顺序表 (ArrayList)");
-    m_structCombo->addItem(u8"栈 (Stack)");
+    QVBoxLayout* mainLayout = new QVBoxLayout(this);
+    mainLayout->setSpacing(15);
 
-    m_valueEdit = new QLineEdit(this);
-    m_valueEdit->setPlaceholderText(u8"输入整数值");
+    mainLayout->addWidget(new QLabel(QStringLiteral("<b>选择数据结构:</b>")));
+    m_structCombo = new QComboBox();
+    m_structCombo->addItem(QStringLiteral("链表 (Linked List)"));
+    m_structCombo->addItem(QStringLiteral("顺序表 (Array List)"));
+    m_structCombo->addItem(QStringLiteral("栈 (Stack)"));
+    mainLayout->addWidget(m_structCombo);
 
-    m_insertBtn = new QPushButton(u8"插入", this);
-    m_removeBtn = new QPushButton(u8"删除", this);
-    m_findBtn = new QPushButton(u8"查找", this);
-    m_resetBtn = new QPushButton(u8"重置", this);
+    mainLayout->addWidget(new QLabel(QStringLiteral("<b>节点数值:</b>")));
+    m_valueEdit = new QLineEdit();
+    m_valueEdit->setPlaceholderText(QStringLiteral("请输入整数"));
+    mainLayout->addWidget(m_valueEdit);
 
-    QVBoxLayout* main = new QVBoxLayout(this);
-    main->addWidget(new QLabel(u8"数据结构类型：", this));
-    main->addWidget(m_structCombo);
-    main->addWidget(new QLabel(u8"节点值：", this));
-    main->addWidget(m_valueEdit);
+    mainLayout->addWidget(new QLabel(QStringLiteral("<b>操作:</b>")));
+    QHBoxLayout* btnLayout = new QHBoxLayout();
+    m_insertBtn = new QPushButton(QStringLiteral("插入"));
+    m_removeBtn = new QPushButton(QStringLiteral("删除"));
+    m_findBtn = new QPushButton(QStringLiteral("查找"));
+    btnLayout->addWidget(m_insertBtn);
+    btnLayout->addWidget(m_removeBtn);
+    btnLayout->addWidget(m_findBtn);
+    mainLayout->addLayout(btnLayout);
 
-    QHBoxLayout* ops = new QHBoxLayout();
-    ops->addWidget(m_insertBtn);
-    ops->addWidget(m_removeBtn);
-    ops->addWidget(m_findBtn);
-    main->addLayout(ops);
+    m_resetBtn = new QPushButton(QStringLiteral("清空 / 重置"));
+    mainLayout->addWidget(m_resetBtn);
 
-    main->addWidget(m_resetBtn);
-    main->addStretch(1);
-    setFixedWidth(240);
+    mainLayout->addStretch();
+    setFixedWidth(260);
 }
 
 void ControlPanel::setupConnections() {
     connect(m_insertBtn, &QPushButton::clicked, this, [this]() {
         QString v = m_valueEdit->text().trimmed();
-        if (v.isEmpty()) { qDebug() << "请输入值"; return; }
-        emit insertRequested(v);
+        if (!v.isEmpty()) emit insertRequested(v);
         });
     connect(m_removeBtn, &QPushButton::clicked, this, [this]() {
         QString v = m_valueEdit->text().trimmed();
-        if (v.isEmpty()) { qDebug() << "请输入值"; return; }
-        emit removeRequested(v);
+        if (!v.isEmpty()) emit removeRequested(v);
         });
     connect(m_findBtn, &QPushButton::clicked, this, [this]() {
         QString v = m_valueEdit->text().trimmed();
-        if (v.isEmpty()) { qDebug() << "请输入值"; return; }
-        emit findRequested(v);
+        if (!v.isEmpty()) emit findRequested(v);
         });
-    connect(m_resetBtn, &QPushButton::clicked, this, [this]() {
-        emit resetRequested();
-        });
-    connect(m_structCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int idx) {
-        emit structureChanged(idx);
-        });
+    connect(m_resetBtn, &QPushButton::clicked, this, &ControlPanel::resetRequested);
+
+    connect(m_structCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+        this, &ControlPanel::structureChanged);
+}
+
+void ControlPanel::setButtonsEnabled(bool enable) {
+    m_insertBtn->setEnabled(enable);
+    m_removeBtn->setEnabled(enable);
+    m_findBtn->setEnabled(enable);
+    m_resetBtn->setEnabled(enable);
+    m_structCombo->setEnabled(enable);
+
+    if (enable) m_insertBtn->setText(QStringLiteral("插入"));
+    else m_insertBtn->setText(QStringLiteral("动画中..."));
 }

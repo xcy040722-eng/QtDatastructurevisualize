@@ -10,6 +10,7 @@
 ControlPanel::ControlPanel(QWidget* parent) : QWidget(parent) {
     setupUi();
     setupConnections();
+    updateButtonTexts(0);
 }
 
 void ControlPanel::setupUi() {
@@ -48,11 +49,11 @@ void ControlPanel::setupUi() {
 void ControlPanel::setupConnections() {
     connect(m_insertBtn, &QPushButton::clicked, this, [this]() {
         QString v = m_valueEdit->text().trimmed();
-        if (!v.isEmpty()) emit insertRequested(v);
+        emit insertRequested(v);
         });
     connect(m_removeBtn, &QPushButton::clicked, this, [this]() {
         QString v = m_valueEdit->text().trimmed();
-        if (!v.isEmpty()) emit removeRequested(v);
+        emit removeRequested(v);
         });
     connect(m_findBtn, &QPushButton::clicked, this, [this]() {
         QString v = m_valueEdit->text().trimmed();
@@ -61,16 +62,42 @@ void ControlPanel::setupConnections() {
     connect(m_resetBtn, &QPushButton::clicked, this, &ControlPanel::resetRequested);
 
     connect(m_structCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-        this, &ControlPanel::structureChanged);
+        this, [this](int idx) {
+            updateButtonTexts(idx);
+            emit structureChanged(idx);
+        });
+}
+
+void ControlPanel::updateButtonTexts(int index) {
+    if (index == 2) { // Stack
+        m_insertBtn->setText(QStringLiteral("入栈 (Push)"));
+        m_removeBtn->setText(QStringLiteral("出栈 (Pop)"));
+        m_findBtn->setEnabled(false);
+        m_findBtn->setText(QStringLiteral("查找 (不支持)"));
+    }
+    else {
+        m_insertBtn->setText(QStringLiteral("插入"));
+        m_removeBtn->setText(QStringLiteral("删除"));
+        m_findBtn->setEnabled(true);
+        m_findBtn->setText(QStringLiteral("查找"));
+    }
 }
 
 void ControlPanel::setButtonsEnabled(bool enable) {
     m_insertBtn->setEnabled(enable);
     m_removeBtn->setEnabled(enable);
-    m_findBtn->setEnabled(enable);
     m_resetBtn->setEnabled(enable);
     m_structCombo->setEnabled(enable);
 
-    if (enable) m_insertBtn->setText(QStringLiteral("插入"));
-    else m_insertBtn->setText(QStringLiteral("动画中..."));
+    int currentIdx = m_structCombo->currentIndex();
+    if (currentIdx == 2) {
+        m_findBtn->setEnabled(false);
+    }
+    else {
+        m_findBtn->setEnabled(enable);
+    }
+}
+
+int ControlPanel::getCurrentStructureIndex() const {
+    return m_structCombo->currentIndex();
 }

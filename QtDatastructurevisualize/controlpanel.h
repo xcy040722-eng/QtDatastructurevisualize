@@ -10,6 +10,7 @@ class ControlPanel : public QWidget {
 public:
     explicit ControlPanel(QWidget* parent = nullptr);
     void setButtonsEnabled(bool enable);
+    int getCurrentStructureIndex() const;
 
 signals:
     void insertRequested(const QString& value);
@@ -28,4 +29,5 @@ private:
 
     void setupUi();
     void setupConnections();
+    void updateButtonTexts(int index);
 };

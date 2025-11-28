@@ -3,6 +3,7 @@
 #include "linearlistscene.h"
 #include "controlpanel.h"
 #include <QDebug>
+#include <QMessageBox>
 
 Controller::Controller(BaseScene* scene, ControlPanel* panel, QObject* parent)
     : QObject(parent), m_scene(scene), m_panel(panel)
@@ -16,50 +17,40 @@ Controller::Controller(BaseScene* scene, ControlPanel* panel, QObject* parent)
     if (m_scene) {
         connect(m_scene, &BaseScene::animationFinished, this, &Controller::onAnimationFinished);
     }
-    else {
-        qDebug() << "CRITICAL ERROR: Scene is null in Controller constructor!";
-    }
 }
 
 void Controller::lockUI() {
     m_isAnimating = true;
     m_panel->setButtonsEnabled(false);
-    qDebug() << "UI Locked";
 }
 
 void Controller::unlockUI() {
     m_isAnimating = false;
     m_panel->setButtonsEnabled(true);
-    qDebug() << "UI Unlocked";
 }
 
 void Controller::onAnimationFinished() {
     unlockUI();
 }
 
+void Controller::showError(const QString& msg) {
+    QMessageBox::warning(m_panel, QStringLiteral("提示"), msg);
+}
+
 void Controller::onStructureChanged(int idx) {
     if (idx < 0 || idx > 2) return;
-
     unlockUI();
-
     m_data.clear();
     m_currentType = static_cast<StructType>(idx);
 
     LinearListScene* ls = dynamic_cast<LinearListScene*>(m_scene);
-    if (ls) {
-        ls->setStructureType(static_cast<LinearListScene::StructureType>(idx));
-        qDebug() << "Switched to structure type:" << idx << ". Data cleared.";
-    }
-    else {
-        qDebug() << "ERROR: Scene is not LinearListScene!";
-    }
+    if (ls) ls->setStructureType(static_cast<LinearListScene::StructureType>(idx));
 }
 
 void Controller::onResetRequested() {
     m_data.clear();
     m_scene->reset();
     unlockUI();
-    qDebug() << "Reset all.";
 }
 
 int Controller::findIndex(int value) {
@@ -70,50 +61,56 @@ int Controller::findIndex(int value) {
 }
 
 void Controller::onInsertRequested(const QString& valueStr) {
-    qDebug() << "Insert Requested:" << valueStr;
+    if (m_isAnimating) return;
 
     bool ok;
     int val = valueStr.toInt(&ok);
     if (!ok) {
-        qDebug() << "Invalid integer input";
-        return;
-    }
-    if (m_isAnimating) {
-        qDebug() << "Ignored: Animation in progress";
+        showError(QStringLiteral("请输入有效的整数！"));
         return;
     }
 
-    if (findIndex(val) != -1) {
-        qDebug() << "Value already exists";
+    if (m_currentType != STACK && findIndex(val) != -1) {
+        showError(QStringLiteral("该数值已存在！"));
         return;
     }
 
     lockUI();
-
-    int index = 0;
-    if (m_currentType == LINKED || m_currentType == ARRAY) {
-        index = m_data.size(); // 尾插
-        m_data.push_back(val);
-    }
-    else if (m_currentType == STACK) {
-        index = m_data.size(); // 栈顶
-        m_data.push_back(val);
-    }
-
-    qDebug() << "Invoking scene insert: val=" << val << " idx=" << index;
+    int index = m_data.size(); // 尾插 / 栈顶
+    m_data.push_back(val);
     m_scene->insertNodeAnimated(val, index);
 }
 
 void Controller::onRemoveRequested(const QString& valueStr) {
-    qDebug() << "Remove Requested:" << valueStr;
+    if (m_isAnimating) return;
 
+    // === 栈的特殊处理：Pop ===
+    if (m_currentType == STACK) {
+        if (m_data.empty()) {
+            showError(QStringLiteral("栈已经空了，无法出栈！"));
+            return;
+        }
+        lockUI();
+        // 只能移除栈顶
+        int val = m_data.back();
+        int index = m_data.size() - 1;
+        m_data.pop_back();
+
+        m_scene->removeNodeAnimated(val, index);
+        return;
+    }
+
+    // === 链表/顺序表的处理：按值删除 ===
     bool ok;
     int val = valueStr.toInt(&ok);
-    if (!ok || m_isAnimating) return;
+    if (!ok) {
+        showError(QStringLiteral("请输入要删除的节点数值！"));
+        return;
+    }
 
     int index = findIndex(val);
     if (index == -1) {
-        qDebug() << "Value not found";
+        showError(QStringLiteral("未找到该数值！"));
         return;
     }
 
@@ -123,9 +120,16 @@ void Controller::onRemoveRequested(const QString& valueStr) {
 }
 
 void Controller::onFindRequested(const QString& valueStr) {
+    if (m_isAnimating) return;
+
+    if (m_currentType == STACK) return;
+
     bool ok;
     int val = valueStr.toInt(&ok);
-    if (!ok || m_isAnimating) return;
+    if (!ok) {
+        showError(QStringLiteral("请输入查找数值！"));
+        return;
+    }
 
     int index = findIndex(val);
     if (index != -1) {
@@ -133,6 +137,6 @@ void Controller::onFindRequested(const QString& valueStr) {
         m_scene->searchNodeAnimated(val, index);
     }
     else {
-        qDebug() << "Not found";
+        showError(QStringLiteral("未找到该数值！"));
     }
 }

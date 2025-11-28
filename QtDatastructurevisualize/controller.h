@@ -29,4 +29,7 @@ private:
     int findIndex(int value);
     void lockUI();
     void unlockUI();
+
+    // ¸¨Öú£º±¨´íµ¯´°
+    void showError(const QString& msg);
 };

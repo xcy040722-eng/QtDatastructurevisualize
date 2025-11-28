@@ -1,34 +1,31 @@
 #pragma once
-// controller.h
-#ifndef CONTROLLER_H
-#define CONTROLLER_H
-
 #include <QObject>
 
-class VisualScene;
+class BaseScene;
+class ArrayListModel;
+class LinkedListModel;
+class StackModel;
 
-/**
- * @brief Controller 负责在 Phase1 中作为界面与场景间的中转层
- * 未来会扩展为：处理 DSModel 的变更、生成 AnimationStep 等。
- */
-class Controller : public QObject
-{
+class Controller : public QObject {
     Q_OBJECT
 public:
-    explicit Controller(VisualScene* scene, QObject* parent = nullptr);
+    explicit Controller(BaseScene* scene, QObject* parent = nullptr);
 
 public slots:
-    // 来自 ControlPanel 的信号
     void onInsertRequested(const QString& value);
     void onRemoveRequested(const QString& value);
     void onFindRequested(const QString& value);
-
-    void onPlayRequested();
-    void onPauseRequested();
     void onResetRequested();
+    void onStructureChanged(int idx);
 
 private:
-    VisualScene* m_scene = nullptr;
-};
+    BaseScene* m_scene = nullptr;
+    // one model active at a time
+    ArrayListModel* m_arrayModel = nullptr;
+    LinkedListModel* m_linkedModel = nullptr;
+    StackModel* m_stackModel = nullptr;
+    enum StructType { LINKED = 0, ARRAY = 1, STACK = 2 } m_struct = LINKED;
 
-#endif // CONTROLLER_H
+    void ensureModels();
+    int toIntOrWarn(const QString& s);
+};

@@ -1,41 +1,22 @@
-#pragma once
-// visualscene.h
-#ifndef VISUALSCENE_H
-#define VISUALSCENE_H
+ï»¿#pragma once
 
 #include <QGraphicsScene>
+#include <QGraphicsRectItem>
 #include <QMap>
 
-class QGraphicsItem;
-
-/**
- * @brief VisualScene ¸ºÔğÍ¼ĞÎ»æÖÆºÍ¼òµ¥²¼¾Ö¹ÜÀí£¨Phase1£©
- * Ìá¹© addNode / removeNode µÈ½Ó¿Ú£¬¹© Controller µ÷ÓÃ¡£
- */
-class VisualScene : public QGraphicsScene
-{
+class LinkedListScene : public QGraphicsScene {
     Q_OBJECT
 public:
-    explicit VisualScene(QObject* parent = nullptr);
+    explicit LinkedListScene(QObject* parent = nullptr);
 
-    // ÔÚ³¡¾°Ä©Î²Ìí¼Ó½Úµã£¨¼òµ¥ÊµÏÖ£¬½ÚµãÒÔ value ÎªÎ¨Ò»±êÊ¶£©
-    void addNode(int value);
-    // É¾³ıÖ¸¶¨½Úµã£¨Èô´æÔÚ£©
-    void removeNode(int value);
-    // Çå¿Õ³¡¾°£¨ÓÃÓÚÖØÖÃ£©
     void clearScene();
 
+public slots:
+    void onNodeInserted(int value);
+    void onNodeDeleted(int value);
+    void onListCleared();
+
 private:
-    // ´æ´¢ value -> groupItem£¨¾ØĞÎ + ÎÄ±¾£©
-    QMap<int, QGraphicsItem*> m_nodeMap;
-
-    // »ù´¡²¼¾Ö²ÎÊı
-    const int m_nodeWidth = 60;
-    const int m_nodeHeight = 36;
-    const int m_hGap = 20;
-
-    // ÖØĞÂÅÅÁĞËùÓĞ½ÚµãÎ»ÖÃ£¨°´²åÈëË³Ğò£©
-    void relayoutNodes();
+    void layoutNodes();
+    QMap<int, QGraphicsRectItem*> m_nodeMap;
 };
-
-#endif // VISUALSCENE_H

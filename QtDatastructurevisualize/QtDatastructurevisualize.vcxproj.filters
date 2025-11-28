@@ -52,6 +52,21 @@
     <ClCompile Include="controller.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="models\linkedlistmodel.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="arraylistmodel.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="stackmodel.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="basescene.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="linearlistscene.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="mainwindow.h">
@@ -64,6 +79,21 @@
       <Filter>Header Files</Filter>
     </QtMoc>
     <QtMoc Include="controlpanel.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="linearlistscene.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="basescene.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="stackmodel.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="arraylistmodel.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="linkedlistmodel.h">
       <Filter>Header Files</Filter>
     </QtMoc>
   </ItemGroup>

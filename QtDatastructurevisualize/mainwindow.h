@@ -1,34 +1,20 @@
-#pragma once
-// mainwindow.h
-#ifndef MAINWINDOW_H
-#define MAINWINDOW_H
-
+ï»¿#pragma once
 #include <QMainWindow>
 
-class ControlPanel;
-class VisualScene;
 class QGraphicsView;
+class ControlPanel;
+class BaseScene;
 class Controller;
 
-class MainWindow : public QMainWindow
-{
+class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
     explicit MainWindow(QWidget* parent = nullptr);
-    ~MainWindow() override;
+    ~MainWindow() override = default;
 
 private:
-    // ¿ØÖÆÃæ°å£¨×ó²à²Ù×÷Çø£©
-    ControlPanel* m_controlPanel = nullptr;
-    // ÓÃÓÚÏÔÊ¾ VisualScene µÄÊÓÍ¼£¨ÓÒ²àÏÔÊ¾Çø£©
-    QGraphicsView* m_graphicsView = nullptr;
-    // ³¡¾°£¨»æÖÆ½Úµã¡¢Ö¸ÕëµÈ£©
-    VisualScene* m_scene = nullptr;
-    // ¿ØÖÆÆ÷£ºÁ¬½Ó½çÃæÓëÄ£ĞÍ/¶¯»­£¨µ±Ç°ÎªÕ¼Î»£©
+    ControlPanel* m_panel = nullptr;
+    QGraphicsView* m_view = nullptr;
+    BaseScene* m_scene = nullptr;
     Controller* m_controller = nullptr;
-
-    void setupUi();
-    void setupConnections();
 };
-
-#endif // MAINWINDOW_H

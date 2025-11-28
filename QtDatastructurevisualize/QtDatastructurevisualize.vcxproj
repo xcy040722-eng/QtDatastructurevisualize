@@ -92,7 +92,12 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="arraylistmodel.cpp" />
+    <ClCompile Include="basescene.cpp" />
     <ClCompile Include="controller.cpp" />
+    <ClCompile Include="linearlistscene.cpp" />
+    <ClCompile Include="models\linkedlistmodel.cpp" />
+    <ClCompile Include="stackmodel.cpp" />
     <ClCompile Include="visualscene.cpp" />
     <QtRcc Include="QtDatastructurevisualize.qrc" />
     <QtUic Include="QtDatastructurevisualize.ui" />
@@ -109,6 +114,15 @@
     <QtMoc Include="controller.h" />
     <QtMoc Include="controlpanel.h" />
     <QtMoc Include="visualscene.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <QtMoc Include="arraylistmodel.h" />
+    <QtMoc Include="basescene.h" />
+    <QtMoc Include="linearlistscene.h" />
+    <QtMoc Include="stackmodel.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <QtMoc Include="linkedlistmodel.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">

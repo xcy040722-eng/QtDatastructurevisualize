@@ -1,72 +1,32 @@
-// mainwindow.cpp
-#include "mainwindow.h"
+ï»¿#include "mainwindow.h"
 #include "controlpanel.h"
-#include "visualscene.h"
+#include "basescene.h"
+#include "linearlistscene.h"
 #include "controller.h"
 
 #include <QGraphicsView>
 #include <QHBoxLayout>
 #include <QWidget>
-#include <QDebug>
 
-MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent)
-{
-    setupUi();
-    setupConnections();
+MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
+    auto* central = new QWidget(this);
+    auto* h = new QHBoxLayout(central);
 
-    qDebug().noquote() << u8"MainWindow ÒÑ³õÊ¼»¯¡£";
-}
+    m_panel = new ControlPanel(central);
+    m_scene = new LinearListScene(this);
+    m_view = new QGraphicsView(m_scene, central);
+    m_view->setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing);
 
-MainWindow::~MainWindow()
-{
-    // Qt »á×Ô¶¯É¾³ý×Ó widget£¨parent-child »úÖÆ£©£¬´Ë´¦ÎÞÐèÊÖ¶¯ delete
-    qDebug().noquote() << u8"MainWindow ÒÑÏú»Ù¡£";
-}
+    h->addWidget(m_panel);
+    h->addWidget(m_view, 1);
 
-/**
- * @brief setupUi ´´½¨½çÃæ²¼¾Ö²¢³õÊ¼»¯¿Ø¼þ
- */
-void MainWindow::setupUi()
-{
-    // ÖÐÑë´°¿ÚÈÝÆ÷
-    QWidget* central = new QWidget(this);
-    this->setCentralWidget(central);
+    setCentralWidget(central);
 
-    // ×ó²à¿ØÖÆÃæ°å£¨·Å°´Å¥¡¢ÊäÈë¿òµÈ£©
-    m_controlPanel = new ControlPanel(central);
-
-    // ÓÒ²à£ºQGraphicsView + VisualScene
-    m_scene = new VisualScene(this);
-    m_graphicsView = new QGraphicsView(m_scene, central);
-    m_graphicsView->setRenderHint(QPainter::Antialiasing);
-    m_graphicsView->setMinimumSize(600, 400);
-
-    // ²¼¾Ö£º×ó²àÕ­ÁÐ£¬ÓÒ²àÕ¹Ê¾Çø
-    QHBoxLayout* hLayout = new QHBoxLayout(central);
-    hLayout->addWidget(m_controlPanel, 0); // stretch 0 £¬¹Ì¶¨¿í¶È
-    hLayout->addWidget(m_graphicsView, 1); // stretch 1£¬×ÔÊÊÓ¦
-
-    // ³õÊ¼»¯¿ØÖÆÆ÷
+    // controller: connect panel -> controller; controller will connect model->scene
     m_controller = new Controller(m_scene, this);
-}
-
-/**
- * @brief setupConnections Á¬½Ó ControlPanel ·¢³öµÄÐÅºÅµ½ Controller£¨ÖÐ×ª£©
- */
-void MainWindow::setupConnections()
-{
-    // ControlPanel -> Controller
-    connect(m_controlPanel, &ControlPanel::insertRequested,
-        m_controller, &Controller::onInsertRequested);
-    connect(m_controlPanel, &ControlPanel::removeRequested,
-        m_controller, &Controller::onRemoveRequested);
-    connect(m_controlPanel, &ControlPanel::findRequested,
-        m_controller, &Controller::onFindRequested);
-
-    connect(m_controlPanel, &ControlPanel::playRequested,
-        m_controller, &Controller::onPlayRequested);
-    connect(m_controlPanel, &ControlPanel::pauseRequested,
-        m_controller, &Controller::onPauseRequested);
-    connect(m_controlPanel, &ControlPanel::resetRequested,
-        m_controller, &Controller::onResetRequested);
+    connect(m_panel, &ControlPanel::insertRequested, m_controller, &Controller::onInsertRequested);
+    connect(m_panel, &ControlPanel::removeRequested, m_controller, &Controller::onRemoveRequested);
+    connect(m_panel, &ControlPanel::findRequested, m_controller, &Controller::onFindRequested);
+    connect(m_panel, &ControlPanel::resetRequested, m_controller, &Controller::onResetRequested);
+    connect(m_panel, &ControlPanel::structureChanged, m_controller, &Controller::onStructureChanged);
 }

@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36429.23 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "QtDatastructurevisualize", "QtDatastructurevisualize\QtDatastructurevisualize.vcxproj", "{17EB11D5-BB5B-4BEA-A46D-79253FB2FB3C}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{17EB11D5-BB5B-4BEA-A46D-79253FB2FB3C}.Debug|x64.ActiveCfg = Debug|x64
+		{17EB11D5-BB5B-4BEA-A46D-79253FB2FB3C}.Debug|x64.Build.0 = Debug|x64
+		{17EB11D5-BB5B-4BEA-A46D-79253FB2FB3C}.Release|x64.ActiveCfg = Release|x64
+		{17EB11D5-BB5B-4BEA-A46D-79253FB2FB3C}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {87798E28-D4B6-4630-AFD8-F5EC5C36A3C7}
+	EndGlobalSection
+EndGlobal

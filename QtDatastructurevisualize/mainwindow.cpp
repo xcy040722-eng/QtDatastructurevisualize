@@ -27,8 +27,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     // 2. 背景色调整
     m_view->setBackgroundBrush(Qt::lightGray);
 
-    // 3. 开启拖拽模式 (ScrollHandDrag)
-    // 这样鼠标会变成一只“手”，按住左键即可拖动画布
+    // 3. 增加拖拽模式 (ScrollHandDrag)
     m_view->setDragMode(QGraphicsView::ScrollHandDrag);
 
     // 4. 自动滚动条策略 (当拖到边缘或缩放过大时出现)

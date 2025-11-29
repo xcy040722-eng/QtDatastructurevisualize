@@ -19,17 +19,24 @@ public slots:
     void onAnimationFinished();
 
 private:
-    BaseScene* m_scene = nullptr;
+    BaseScene* m_scene = nullptr; // 当前活跃的场景指针
     ControlPanel* m_panel = nullptr;
 
+    // 场景缓存 (避免每次切换都 new)
+    BaseScene* m_linearScene = nullptr;
+    BaseScene* m_treeScene = nullptr; // === 新增：树形场景 ===
+
     std::vector<int> m_data;
-    enum StructType { LINKED = 0, ARRAY = 1, STACK = 2 } m_currentType = LINKED;
+    // 枚举对应 Combo Box 索引
+    enum StructType { LINKED = 0, ARRAY = 1, STACK = 2, TREE = 3 } m_currentType = LINKED;
     bool m_isAnimating = false;
 
     int findIndex(int value);
     void lockUI();
     void unlockUI();
 
-    // 辅助：报错弹窗
     void showError(const QString& msg);
+
+    // 切换当前场景逻辑
+    void switchScene(BaseScene* newScene);
 };

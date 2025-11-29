@@ -98,6 +98,7 @@
     <ClCompile Include="linearlistscene.cpp" />
     <ClCompile Include="models\linkedlistmodel.cpp" />
     <ClCompile Include="stackmodel.cpp" />
+    <ClCompile Include="treescene.cpp" />
     <ClCompile Include="visualscene.cpp" />
     <QtRcc Include="QtDatastructurevisualize.qrc" />
     <QtUic Include="QtDatastructurevisualize.ui" />
@@ -123,6 +124,9 @@
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="linkedlistmodel.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <QtMoc Include="treescene.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">

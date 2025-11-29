@@ -67,6 +67,9 @@
     <ClCompile Include="linearlistscene.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="treescene.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="mainwindow.h">
@@ -94,6 +97,9 @@
       <Filter>Header Files</Filter>
     </QtMoc>
     <QtMoc Include="linkedlistmodel.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="treescene.h">
       <Filter>Header Files</Filter>
     </QtMoc>
   </ItemGroup>

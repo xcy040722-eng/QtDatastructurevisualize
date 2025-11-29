@@ -1,7 +1,7 @@
 ﻿#include "mainwindow.h"
 #include "controlpanel.h"
 #include "linearlistscene.h"
-#include "treescene.h" // === 关键：包含树形场景头文件 ===
+#include "treescene.h" // === 关键：包含树场景 ===
 #include "controller.h"
 #include <QGraphicsView>
 #include <QHBoxLayout>
@@ -16,23 +16,18 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     layout->setContentsMargins(5, 5, 5, 5);
 
     m_panel = new ControlPanel(this);
-    // 默认创建线性场景
     m_scene = new LinearListScene(this);
 
     m_view = new QGraphicsView(m_scene, this);
     m_view->setRenderHint(QPainter::Antialiasing);
 
-    // === 布局优化 ===
-    // 1. 左上对齐
+    // === 布局设置 ===
     m_view->setAlignment(Qt::AlignLeft | Qt::AlignTop);
-
-    // 2. 背景色调整
     m_view->setBackgroundBrush(Qt::lightGray);
 
-    // 3. 开启拖拽模式 (ScrollHandDrag)
+    // 启用鼠标拖拽画布
     m_view->setDragMode(QGraphicsView::ScrollHandDrag);
 
-    // 4. 自动滚动条策略
     m_view->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     m_view->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
 

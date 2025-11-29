@@ -1,7 +1,7 @@
 ﻿#include "controller.h"
 #include "basescene.h"
 #include "linearlistscene.h"
-#include "treescene.h" // === 必须包含 TreeScene 头文件 ===
+#include "treescene.h" // === 包含树场景 ===
 #include "controlpanel.h"
 #include <QDebug>
 #include <QMessageBox>
@@ -10,7 +10,7 @@
 Controller::Controller(BaseScene* scene, ControlPanel* panel, QObject* parent)
     : QObject(parent), m_panel(panel)
 {
-    // 初始场景是 LinearListScene (由 MainWindow 创建传入)
+    // 初始场景是 LinearListScene
     m_linearScene = scene;
     m_scene = m_linearScene;
 
@@ -23,9 +23,8 @@ Controller::Controller(BaseScene* scene, ControlPanel* panel, QObject* parent)
     connect(m_panel, &ControlPanel::resetRequested, this, &Controller::onResetRequested);
     connect(m_panel, &ControlPanel::structureChanged, this, &Controller::onStructureChanged);
 
-    // 连接初始场景信号
+    // 连接信号
     connect(m_scene, &BaseScene::animationFinished, this, &Controller::onAnimationFinished);
-    // 连接 TreeScene 信号
     connect(m_treeScene, &BaseScene::animationFinished, this, &Controller::onAnimationFinished);
 }
 
@@ -47,15 +46,13 @@ void Controller::showError(const QString& msg) {
     QMessageBox::warning(m_panel, QStringLiteral("提示"), msg);
 }
 
-// 辅助函数：获取 View 并切换场景
+// 核心：切换视图显示的场景
 void Controller::switchScene(BaseScene* newScene) {
     if (m_scene == newScene) return;
 
     m_scene = newScene;
 
-    // 这里的 parent 是 MainWindow
-    // 我们通过 findChild 找到 QGraphicsView 来设置新的 scene
-    // 这种做法避免了修改 MainWindow 的公开接口
+    // 查找 MainWindow 中的 QGraphicsView
     QGraphicsView* view = parent()->findChild<QGraphicsView*>();
     if (view) {
         view->setScene(m_scene);
@@ -69,14 +66,12 @@ void Controller::onStructureChanged(int idx) {
     m_data.clear();
     m_currentType = static_cast<StructType>(idx);
 
-    // 根据类型选择场景
     if (idx == TREE) {
-        m_treeScene->reset(); // 进树模式先清空
+        m_treeScene->reset();
         switchScene(m_treeScene);
         qDebug() << "Switched to Tree Scene";
     }
     else {
-        // 线性结构
         LinearListScene* ls = dynamic_cast<LinearListScene*>(m_linearScene);
         if (ls) {
             ls->setStructureType(static_cast<LinearListScene::StructureType>(idx));
@@ -110,7 +105,6 @@ void Controller::onInsertRequested(const QString& valueStr) {
         return;
     }
 
-    // 简单查重 (对于 BST，其实可以在 Scene 里再做一次，但这里做预判体验更好)
     if (m_currentType != STACK && findIndex(val) != -1) {
         showError(QStringLiteral("该数值已存在！"));
         return;
@@ -119,8 +113,6 @@ void Controller::onInsertRequested(const QString& valueStr) {
     lockUI();
     int index = m_data.size();
     m_data.push_back(val);
-
-    // 调用当前激活场景的插入接口 (多态)
     m_scene->insertNodeAnimated(val, index);
 }
 
@@ -170,10 +162,9 @@ void Controller::onFindRequested(const QString& valueStr) {
     }
 
     int index = findIndex(val);
-    // 注意：BST 的查找不依赖 index，但 LinearList 依赖。
-    // 如果是 Tree 模式，index 其实无所谓，传 0 或 -1 都行，TreeScene 会自己搜。
-    // 但为了兼容旧逻辑，我们还是传了 index。
-    if (index != -1 || m_currentType == TREE) {
+    // Tree 模式下即使 index 为 -1 (未在 m_data 中找到) 也允许调用，因为 TreeScene 内部可能有更复杂的逻辑
+    // 但为了安全，这里还是校验了 index。
+    if (index != -1) {
         lockUI();
         m_scene->searchNodeAnimated(val, index);
     }

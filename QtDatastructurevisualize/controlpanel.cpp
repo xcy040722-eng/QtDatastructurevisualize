@@ -22,7 +22,7 @@ void ControlPanel::setupUi() {
     m_structCombo->addItem(QStringLiteral("链表 (Linked List)"));
     m_structCombo->addItem(QStringLiteral("顺序表 (Array List)"));
     m_structCombo->addItem(QStringLiteral("栈 (Stack)"));
-    // === 新增：树形结构 ===
+    // === 新增：二叉搜索树 ===
     m_structCombo->addItem(QStringLiteral("二叉搜索树 (BST)"));
 
     mainLayout->addWidget(m_structCombo);
@@ -94,7 +94,6 @@ void ControlPanel::setButtonsEnabled(bool enable) {
     m_structCombo->setEnabled(enable);
 
     int currentIdx = m_structCombo->currentIndex();
-    // 只有栈不支持查找
     if (currentIdx == 2) {
         m_findBtn->setEnabled(false);
     }

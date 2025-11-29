@@ -5,10 +5,10 @@
 #include <QDebug>
 #include <QPen>
 #include <QBrush>
-#include <QTimer>
+#include <Qtimer.h>
 
 TreeScene::TreeScene(QObject* parent) : BaseScene(parent) {
-    // 树形结构可能很宽/很深，设置较大的场景范围
+    // 设置足够大的画布，支持滚动条
     setSceneRect(0, 0, 2000, 1500);
 }
 
@@ -24,6 +24,11 @@ void TreeScene::reset() {
         delete m_probeHalo;
         m_probeHalo = nullptr;
     }
+    // 清空垃圾箱
+    for (auto item : m_trashItems) {
+        if (item) { removeItem(item); delete item; }
+    }
+    m_trashItems.clear();
     update();
 }
 
@@ -31,112 +36,120 @@ void TreeScene::cleanTreeRecursive(TreeNode* node) {
     if (!node) return;
     cleanTreeRecursive(node->left);
     cleanTreeRecursive(node->right);
-
     if (node->circle) { removeItem(node->circle); delete node->circle; }
-    if (node->text) {
-        // text 通常是 circle 的 child item，circle 删除时 text 也会自动删除
-        // 但为了保险，如果它是独立的，也可以删。这里它是 child，所以不需要手动 delete text
-    }
     if (node->linkToParent) { removeItem(node->linkToParent); delete node->linkToParent; }
     delete node;
 }
 
-// === 核心布局算法 ===
-// 参数 hOffset: 当前层级的水平偏移量，随深度增加而减半
-// 这保证了树形状是标准的金字塔形，不会重叠
-void TreeScene::updateLayout(TreeNode* node, int x, int y, int hOffset) {
+// === 1. 计算布局 (只算坐标，不动) ===
+void TreeScene::calculateLayout(TreeNode* node, int x, int y, int hOffset) {
     if (!node) return;
 
-    node->x = x;
-    node->y = y;
+    node->targetX = x;
+    node->targetY = y;
 
-    // 递归处理左右子树
-    // 下一层的偏移量减少。最小偏移量设为 40，防止挤在一起
-    int nextOffset = qMax(40, hOffset / 2);
+    // 最小水平偏移量控制在 35，防止重叠
+    int nextOffset = qMax(35, hOffset / 2);
 
-    updateLayout(node->left, x - hOffset, y + LEVEL_HEIGHT, nextOffset);
-    updateLayout(node->right, x + hOffset, y + LEVEL_HEIGHT, nextOffset);
+    calculateLayout(node->left, x - hOffset, y + LEVEL_HEIGHT, nextOffset);
+    calculateLayout(node->right, x + hOffset, y + LEVEL_HEIGHT, nextOffset);
 }
 
-// 将节点平滑移动到计算好的 layout 位置
-void TreeScene::animateLayout(TreeNode* node) {
+// === 2. 刷新视觉 (动画移动 + 连线修复) ===
+void TreeScene::refreshTreeVisuals(TreeNode* node, QPointF parentPos) {
     if (!node || !node->circle) return;
 
-    // 目标位置
-    QPointF endPos(node->x - NODE_RADIUS, node->y - NODE_RADIUS);
+    // A. 节点移动动画
+    // 注意：这里能直接用 NODE_RADIUS 是因为我们还在成员函数里，不在 lambda 里
+    QPointF endPos(node->targetX - NODE_RADIUS, node->targetY - NODE_RADIUS);
 
-    // 如果位置变了，播放动画
+    // 如果位置有变化，播放动画
     if (node->circle->pos() != endPos) {
-        QVariantAnimation* vAnim = new QVariantAnimation(this);
-        vAnim->setDuration(600); // 移动耗时
-        vAnim->setStartValue(node->circle->pos());
-        vAnim->setEndValue(endPos);
-        vAnim->setEasingCurve(QEasingCurve::InOutQuad);
+        QVariantAnimation* anim = new QVariantAnimation(this);
+        anim->setDuration(600);
+        anim->setStartValue(node->circle->pos());
+        anim->setEndValue(endPos);
+        anim->setEasingCurve(QEasingCurve::OutCubic);
 
-        connect(vAnim, &QVariantAnimation::valueChanged, this, [node](const QVariant& val) {
-            if (node && node->circle) {
-                node->circle->setPos(val.toPointF());
-                // 同步更新连线端点
-                if (node->linkToParent) {
-                    QLineF line = node->linkToParent->line();
-                    line.setP2(node->circle->pos() + QPointF(25, 25)); // 连接到圆心
-                    node->linkToParent->setLine(line);
-                }
+        // 修复 1：虽然这个 lambda 没用到成员变量，但为了保险可以加上 [this, node]
+        connect(anim, &QVariantAnimation::valueChanged, this, [node](const QVariant& val) {
+            if (node && node->circle) node->circle->setPos(val.toPointF());
+            });
+
+        // 修复 2 (关键报错点)：这里用到了 NODE_RADIUS，必须捕获 'this'
+        // 修改前：[node, parentPos]
+        // 修改后：[this, node, parentPos]
+        connect(anim, &QVariantAnimation::valueChanged, this, [this, node, parentPos]() {
+            if (node && node->linkToParent) {
+                // 现在 lambda 拥有了 'this' 指针，就能看见 NODE_RADIUS 了！
+                QPointF myCenter = node->circle->pos() + QPointF(NODE_RADIUS, NODE_RADIUS);
+                QLineF line(parentPos, myCenter);
+                node->linkToParent->setLine(line);
             }
             });
 
-        // 动画对象自动销毁
-        connect(vAnim, &QVariantAnimation::finished, vAnim, &QObject::deleteLater);
-        vAnim->start();
+        connect(anim, &QVariantAnimation::finished, anim, &QObject::deleteLater);
+        anim->start();
     }
 
-    // 父节点连线的起点也需要更新 (虽然上面只更新了终点 P2)
-    // 为了简化，我们假设父节点也在移动，父节点会负责更新它所有孩子的连线起点 P1
-    // 或者我们在 updateLayout 后统一重绘连线。
-    // Phase 3 简单版：我们只更新 P2。
-    // 如果父节点移动了，P1 没动，线会断。
-    // 修正：我们需要在父节点移动时，更新左右孩子的 line P1。
+    // ... (函数的剩余部分保持不变) ...
+    // B. 连线修复 (静态或动画结束后的修正)
+    if (parentPos != QPointF(-1, -1)) {
+        QPointF myCenter = endPos + QPointF(NODE_RADIUS, NODE_RADIUS);
+        QLineF correctLine(parentPos, myCenter);
 
-    // 更好的做法：在这里不做复杂的连线更新动画，而是每一帧重绘。
-    // 但为了性能和代码量，我们采用简单的策略：递归调用动画
-    animateLayout(node->left);
-    animateLayout(node->right);
+        if (!node->linkToParent) {
+            node->linkToParent = addLine(correctLine, QPen(Qt::black, 2));
+            node->linkToParent->setZValue(0);
+        }
+        else {
+            node->linkToParent->setLine(correctLine);
+        }
+    }
+    else {
+        // 根节点没有连线
+        if (node->linkToParent) {
+            removeItem(node->linkToParent);
+            delete node->linkToParent;
+            node->linkToParent = nullptr;
+        }
+    }
+
+    // 递归处理子节点
+    QPointF myTargetCenter(node->targetX, node->targetY);
+    refreshTreeVisuals(node->left, myTargetCenter);
+    refreshTreeVisuals(node->right, myTargetCenter);
 }
 
-// === 探针逻辑 ===
+// === 探针动画 (连续滚动版) ===
 void TreeScene::animSearchPath(int targetVal, std::function<void(TreeNode*, TreeNode*, bool)> onFinished) {
     if (!m_probeHalo) {
         m_probeHalo = addEllipse(0, 0, NODE_RADIUS * 2 + 10, NODE_RADIUS * 2 + 10,
-            QPen(Qt::red, 3), Qt::NoBrush);
+            QPen(Qt::red, 4), Qt::NoBrush);
         m_probeHalo->setZValue(999);
-        m_probeHalo->setVisible(false);
     }
-
     m_probeHalo->setVisible(true);
+    m_probeHalo->setOpacity(1.0);
 
-    QSequentialAnimationGroup* group = new QSequentialAnimationGroup(this);
+    // 1. 预先计算路径的所有关键点
+    QList<QPointF> pathPoints;
 
     TreeNode* curr = root;
     TreeNode* parent = nullptr;
     bool isLeft = false;
 
-    // 初始位置：根节点上方
-    QPointF startPos(ROOT_X - NODE_RADIUS - 5, ROOT_Y - NODE_RADIUS - 5);
-    if (root && root->circle) startPos = root->circle->pos() - QPointF(5, 5);
+    // 起点：根节点
+    if (root) {
+        pathPoints.append(root->circle->pos() - QPointF(5, 5));
+    }
+    else {
+        pathPoints.append(QPointF(ROOT_X - NODE_RADIUS - 5, ROOT_Y - NODE_RADIUS - 5));
+    }
 
-    m_probeHalo->setPos(startPos);
-
-    // 模拟搜索路径
     while (curr != nullptr) {
-        // 添加比较停顿
-        group->addPause(300);
-
-        if (curr->value == targetVal) {
-            break; // 找到了
-        }
+        if (curr->value == targetVal) break; // 找到了
 
         parent = curr;
-
         if (targetVal < curr->value) {
             curr = curr->left;
             isLeft = true;
@@ -146,24 +159,37 @@ void TreeScene::animSearchPath(int targetVal, std::function<void(TreeNode*, Tree
             isLeft = false;
         }
 
-        if (curr && curr->circle) {
-            // 移动到下一个节点
-            QVariantAnimation* move = new QVariantAnimation(group);
-            move->setDuration(400);
-            move->setStartValue(m_probeHalo->pos());
-            move->setEndValue(curr->circle->pos() - QPointF(5, 5));
-            move->setEasingCurve(QEasingCurve::InOutQuad);
-
-            // 必须捕获 this
-            connect(move, &QVariantAnimation::valueChanged, this, [this](const QVariant& val) {
-                if (m_probeHalo) m_probeHalo->setPos(val.toPointF());
-                });
-            group->addAnimation(move);
+        if (curr) {
+            pathPoints.append(curr->circle->pos() - QPointF(5, 5));
         }
     }
 
+    // 2. 构建连续动画组
+    QSequentialAnimationGroup* group = new QSequentialAnimationGroup(this);
+
+    // 如果没有路径（例如空树），直接回调
+    if (pathPoints.size() <= 1 && !root) {
+        onFinished(nullptr, nullptr, false);
+        return;
+    }
+
+    for (int i = 0; i < pathPoints.size() - 1; ++i) {
+        QVariantAnimation* move = new QVariantAnimation(group);
+        move->setDuration(500); // 滚动速度
+        move->setStartValue(pathPoints[i]);
+        move->setEndValue(pathPoints[i + 1]);
+        move->setEasingCurve(QEasingCurve::InOutQuad);
+
+        connect(move, &QVariantAnimation::valueChanged, this, [this](const QVariant& val) {
+            if (m_probeHalo) m_probeHalo->setPos(val.toPointF());
+            });
+
+        group->addAnimation(move);
+        // 稍微停顿一下，模拟"思考"
+        group->addPause(100);
+    }
+
     connect(group, &QAbstractAnimation::finished, this, [this, onFinished, parent, curr, isLeft, group]() {
-        m_probeHalo->setVisible(false);
         onFinished(parent, curr, isLeft);
         group->deleteLater();
         });
@@ -172,36 +198,33 @@ void TreeScene::animSearchPath(int targetVal, std::function<void(TreeNode*, Tree
 }
 
 void TreeScene::createVisualNode(TreeNode* node, int x, int y) {
-    node->x = x;
-    node->y = y;
+    node->targetX = x;
+    node->targetY = y;
 
-    // 绘制圆形
     node->circle = addEllipse(0, 0, NODE_RADIUS * 2, NODE_RADIUS * 2,
-        QPen(Qt::black, 2), QBrush(QColor(144, 238, 144))); // 浅绿
+        QPen(Qt::black, 2), QBrush(QColor(144, 238, 144)));
     node->circle->setPos(x - NODE_RADIUS, y - NODE_RADIUS);
-    node->circle->setZValue(10); // 确保在连线上方
+    node->circle->setZValue(10);
 
-    // 绘制文本
     node->text = new QGraphicsSimpleTextItem(QString::number(node->value), node->circle);
     auto b = node->text->boundingRect();
-    // 居中
     node->text->setPos((NODE_RADIUS * 2 - b.width()) / 2, (NODE_RADIUS * 2 - b.height()) / 2);
 }
 
 void TreeScene::insertNodeAnimated(int value, int index) {
     (void)index;
 
+    // 空树特判
     if (!root) {
-        // 根节点情况
         root = new TreeNode(value);
         createVisualNode(root, ROOT_X, ROOT_Y);
-
         // 弹出动画
         root->circle->setScale(0);
         QVariantAnimation* anim = new QVariantAnimation(this);
         anim->setDuration(500);
         anim->setStartValue(0.0);
         anim->setEndValue(1.0);
+        anim->setEasingCurve(QEasingCurve::OutBack);
         connect(anim, &QVariantAnimation::valueChanged, this, [this](const QVariant& val) {
             if (root && root->circle) {
                 root->circle->setScale(val.toFloat());
@@ -213,61 +236,92 @@ void TreeScene::insertNodeAnimated(int value, int index) {
         return;
     }
 
-    // 正常插入：先播放查找
     animSearchPath(value, [this, value](TreeNode* parent, TreeNode* current, bool isLeft) {
         if (current != nullptr) {
-            // 已存在，不高亮也不插入，直接结束
-            emit animationFinished();
+            // 已存在：高亮一下
+            searchNodeAnimated(value, 0);
             return;
         }
 
-        // 创建新节点结构
+        if (m_probeHalo) m_probeHalo->setVisible(false);
+
+        // 逻辑插入
         TreeNode* newNode = new TreeNode(value);
         if (isLeft) parent->left = newNode;
         else parent->right = newNode;
 
-        // === 关键：先重新计算所有节点的目标位置 ===
-        updateLayout(root, ROOT_X, ROOT_Y, 200);
+        // 1. 全局重新计算布局 (确定新节点位置 + 旧节点调整)
+        calculateLayout(root, ROOT_X, ROOT_Y, 200);
 
-        // 绘制新节点（先画在目标位置）
-        createVisualNode(newNode, newNode->x, newNode->y);
+        // 2. 创建可视元素
+        createVisualNode(newNode, newNode->targetX, newNode->targetY);
 
-        // 绘制连线
-        QPointF pCenter(parent->x, parent->y);
-        QPointF cCenter(newNode->x, newNode->y);
-        QGraphicsLineItem* line = addLine(QLineF(pCenter, cCenter), QPen(Qt::black, 2));
-        line->setZValue(0); // 在底层
-        newNode->linkToParent = line;
-
-        // 新节点淡入动画
+        // 3. 初始状态：透明，位置在父节点处 (模拟从父节点长出来)
+        if (parent && parent->circle) {
+            newNode->circle->setPos(parent->circle->pos());
+        }
         newNode->circle->setOpacity(0);
-        line->setOpacity(0);
 
-        QVariantAnimation* anim = new QVariantAnimation(this);
-        anim->setDuration(500);
-        anim->setStartValue(0.0);
-        anim->setEndValue(1.0);
-        connect(anim, &QVariantAnimation::valueChanged, this, [newNode, line](const QVariant& val) {
+        // 4. 刷新全树 (这一步会把 newNode 移动到 targetX/Y)
+        refreshTreeVisuals(root, QPointF(-1, -1));
+
+        // 5. 额外的新节点出现动画
+        QVariantAnimation* appear = new QVariantAnimation(this);
+        appear->setDuration(600);
+        appear->setStartValue(0.0);
+        appear->setEndValue(1.0);
+        connect(appear, &QVariantAnimation::valueChanged, this, [newNode](const QVariant& val) {
             if (newNode && newNode->circle) newNode->circle->setOpacity(val.toFloat());
-            if (line) line->setOpacity(val.toFloat());
             });
-
-        // 动画结束后，不仅解锁 UI，还可以顺便执行一次全树的平滑调整（防止布局拥挤）
-        connect(anim, &QVariantAnimation::finished, this, [this]() {
-            animateLayout(root); // 确保所有节点都对齐到新网格
-            emit animationFinished();
-            });
-        anim->start();
+        connect(appear, &QVariantAnimation::finished, this, &BaseScene::animationFinished);
+        appear->start();
         });
 }
 
-// 辅助：找最小
+// 辅助：标记删除，将图形移入垃圾箱
+void TreeScene::markForDeletion(TreeNode* node) {
+    if (!node) return;
+    if (node->circle) m_trashItems.append(node->circle);
+    if (node->linkToParent) m_trashItems.append(node->linkToParent);
+}
+
+void TreeScene::processTrashBin() {
+    if (m_trashItems.isEmpty()) return;
+
+    // 播放淡出动画
+    QVariantAnimation* anim = new QVariantAnimation(this);
+    anim->setDuration(600);
+    anim->setStartValue(1.0);
+    anim->setEndValue(0.0);
+
+    QList<QGraphicsItem*> items = m_trashItems;
+    m_trashItems.clear();
+
+    connect(anim, &QVariantAnimation::valueChanged, this, [items](const QVariant& val) {
+        for (auto item : items) {
+            if (item) item->setOpacity(val.toFloat());
+        }
+        });
+
+    connect(anim, &QVariantAnimation::finished, this, [this, items, anim]() {
+        for (auto item : items) {
+            if (item) {
+                this->removeItem(item);
+                delete item;
+            }
+        }
+        anim->deleteLater();
+        });
+
+    anim->start();
+}
+
 TreeNode* TreeScene::findMin(TreeNode* node) {
     while (node->left != nullptr) node = node->left;
     return node;
 }
 
-// 辅助：递归删除逻辑
+// 递归删除 - 关键：处理节点移动和垃圾回收
 TreeNode* TreeScene::deleteNodeRecursive(TreeNode* root, int value, bool& deleted) {
     if (root == nullptr) return root;
 
@@ -278,35 +332,39 @@ TreeNode* TreeScene::deleteNodeRecursive(TreeNode* root, int value, bool& delete
         root->right = deleteNodeRecursive(root->right, value, deleted);
     }
     else {
-        // 找到目标
         deleted = true;
 
-        // Case 1: 无子节点 或 仅有一个子节点
-        if (root->left == nullptr) {
-            TreeNode* temp = root->right;
-            // 删除视觉项
-            if (root->circle) { removeItem(root->circle); delete root->circle; }
-            if (root->linkToParent) { removeItem(root->linkToParent); delete root->linkToParent; }
+        // Case 1: 无子节点
+        if (root->left == nullptr && root->right == nullptr) {
+            markForDeletion(root);
             delete root;
-            return temp;
+            return nullptr;
+        }
+        // Case 2: 单子节点
+        else if (root->left == nullptr) {
+            TreeNode* temp = root->right;
+            markForDeletion(root); // 删掉当前节点 visuals
+            delete root;
+            return temp; // 返回右孩子顶替位置
         }
         else if (root->right == nullptr) {
             TreeNode* temp = root->left;
-            if (root->circle) { removeItem(root->circle); delete root->circle; }
-            if (root->linkToParent) { removeItem(root->linkToParent); delete root->linkToParent; }
+            markForDeletion(root);
             delete root;
             return temp;
         }
+        // Case 3: 双子节点
+        else {
+            // 找到右子树最小值
+            TreeNode* temp = findMin(root->right);
 
-        // Case 2: 两个子节点 -> 找右子树最小值顶替
-        TreeNode* temp = findMin(root->right);
-        root->value = temp->value; // 逻辑值替换
+            // 技巧：我们保留 root 的物理结构（视觉对象），只改值
+            root->value = temp->value;
+            if (root->text) root->text->setText(QString::number(root->value));
 
-        // 视觉值替换
-        if (root->text) root->text->setText(QString::number(root->value));
-
-        // 递归删除那个被拿来顶替的节点
-        root->right = deleteNodeRecursive(root->right, temp->value, deleted);
+            // 递归删除那个被搬运的 temp 节点
+            root->right = deleteNodeRecursive(root->right, temp->value, deleted);
+        }
     }
     return root;
 }
@@ -315,40 +373,53 @@ void TreeScene::removeNodeAnimated(int value, int index) {
     (void)index;
 
     animSearchPath(value, [this, value](TreeNode* parent, TreeNode* curr, bool) {
-        // 这里的 curr 只是动画寻址的终点，不一定是真正的逻辑节点（因为 animSearchPath 只是模拟）
-        // 真正的查找在 deleteNodeRecursive 里做
+        if (m_probeHalo) m_probeHalo->setVisible(false);
+
+        if (!curr && parent && parent->value != value && (!root || root->value != value)) {
+            emit animationFinished();
+            return;
+        }
 
         bool deleted = false;
+        // 1. 逻辑删除 (同时将废弃图形放入垃圾箱)
         root = deleteNodeRecursive(root, value, deleted);
 
         if (deleted) {
-            // === 修复：使用布局刷新代替 cleanAllGraphics ===
-            // 1. 重新计算位置 (因为节点少了，树可能变窄)
-            updateLayout(root, ROOT_X, ROOT_Y, 200);
+            // 2. 重新计算剩余节点布局
+            calculateLayout(root, ROOT_X, ROOT_Y, 200);
 
-            // 2. 播放调整动画 (让剩下的节点飘到新位置)
-            animateLayout(root);
+            // 3. 播放：垃圾箱淡出 + 存活节点移动
+            processTrashBin();
+
+            // 关键：强制刷新所有存活节点的连线
+            refreshTreeVisuals(root, QPointF(-1, -1));
+
+            QTimer::singleShot(650, this, &BaseScene::animationFinished);
         }
-
-        emit animationFinished();
+        else {
+            emit animationFinished();
+        }
         });
 }
 
 void TreeScene::searchNodeAnimated(int value, int index) {
     (void)index;
-    animSearchPath(value, [this, value](TreeNode* p, TreeNode* c, bool) {
-        // 注意：animSearchPath 结束时 c 可能为空(没找到)，也可能不为空(找到了)
-        // 我们需要再次确认一下
-        if (c && c->value == value && c->circle) {
-            // 变绿
-            QBrush originalBrush = c->circle->brush();
-            c->circle->setBrush(QBrush(Qt::green));
+    animSearchPath(value, [this](TreeNode* p, TreeNode* curr, bool) {
+        if (m_probeHalo) m_probeHalo->setVisible(false);
 
-            // 1秒后恢复
-            QTimer::singleShot(1000, [c, originalBrush]() {
-                if (c && c->circle) c->circle->setBrush(originalBrush);
+        if (curr && curr->circle) {
+            // 绿色高亮
+            QBrush original = curr->circle->brush();
+            curr->circle->setBrush(QBrush(Qt::green));
+
+            QTimer::singleShot(1000, [this, curr, original]() {
+                // 恢复颜色
+                if (curr && curr->circle) curr->circle->setBrush(original);
+                emit animationFinished();
                 });
         }
-        emit animationFinished();
+        else {
+            emit animationFinished();
+        }
         });
 }

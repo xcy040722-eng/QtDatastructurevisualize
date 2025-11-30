@@ -1,14 +1,14 @@
-#include "treescene.h"
+ï»¿#include "treescene.h"
 #include <QPropertyAnimation>
 #include <QSequentialAnimationGroup>
 #include <QVariantAnimation>
 #include <QDebug>
 #include <QPen>
 #include <QBrush>
-#include <Qtimer.h>
+#include <QFont>
+#include <QTimer>
 
 TreeScene::TreeScene(QObject* parent) : BaseScene(parent) {
-    // ÉèÖÃ×ã¹»´óµÄ»­²¼£¬Ö§³Ö¹ö¶¯Ìõ
     setSceneRect(0, 0, 2000, 1500);
 }
 
@@ -24,7 +24,12 @@ void TreeScene::reset() {
         delete m_probeHalo;
         m_probeHalo = nullptr;
     }
-    // Çå¿ÕÀ¬»øÏä
+    if (m_resultText) {
+        removeItem(m_resultText);
+        delete m_resultText;
+        m_resultText = nullptr;
+    }
+
     for (auto item : m_trashItems) {
         if (item) { removeItem(item); delete item; }
     }
@@ -41,28 +46,20 @@ void TreeScene::cleanTreeRecursive(TreeNode* node) {
     delete node;
 }
 
-// === 1. ¼ÆËã²¼¾Ö (Ö»Ëã×ø±ê£¬²»¶¯) ===
 void TreeScene::calculateLayout(TreeNode* node, int x, int y, int hOffset) {
     if (!node) return;
-
     node->targetX = x;
     node->targetY = y;
-
-    // ×îÐ¡Ë®Æ½Æ«ÒÆÁ¿¿ØÖÆÔÚ 35£¬·ÀÖ¹ÖØµþ
     int nextOffset = qMax(35, hOffset / 2);
-
     calculateLayout(node->left, x - hOffset, y + LEVEL_HEIGHT, nextOffset);
     calculateLayout(node->right, x + hOffset, y + LEVEL_HEIGHT, nextOffset);
 }
 
-// === 2. Ë¢ÐÂÊÓ¾õ (¶¯»­ÒÆ¶¯ + Á¬ÏßÐÞ¸´) ===
 void TreeScene::refreshTreeVisuals(TreeNode* node, QPointF parentPos) {
     if (!node || !node->circle) return;
 
-    // A. ½ÚµãÒÆ¶¯¶¯»­
     QPointF endPos(node->targetX - NODE_RADIUS, node->targetY - NODE_RADIUS);
 
-    // Èç¹ûÎ»ÖÃÓÐ±ä»¯£¬²¥·Å¶¯»­
     if (node->circle->pos() != endPos) {
         QVariantAnimation* anim = new QVariantAnimation(this);
         anim->setDuration(600);
@@ -70,12 +67,10 @@ void TreeScene::refreshTreeVisuals(TreeNode* node, QPointF parentPos) {
         anim->setEndValue(endPos);
         anim->setEasingCurve(QEasingCurve::OutCubic);
 
-        // Lambda ²¶»ñ this ÒÔ·ÃÎÊ NODE_RADIUS
-        connect(anim, &QVariantAnimation::valueChanged, this, [node](const QVariant& val) {
+        connect(anim, &QVariantAnimation::valueChanged, this, [this, node](const QVariant& val) {
             if (node && node->circle) node->circle->setPos(val.toPointF());
             });
 
-        // Ã¿Ò»Ö¡¶¼³¢ÊÔ¸üÐÂÁ¬Ïß£¬±£Ö¤¶¯»­Ê±²»ÍÑ½Ú
         connect(anim, &QVariantAnimation::valueChanged, this, [this, node, parentPos]() {
             if (node && node->linkToParent) {
                 QPointF myCenter = node->circle->pos() + QPointF(NODE_RADIUS, NODE_RADIUS);
@@ -88,7 +83,6 @@ void TreeScene::refreshTreeVisuals(TreeNode* node, QPointF parentPos) {
         anim->start();
     }
 
-    // B. Á¬ÏßÐÞ¸´ (¾²Ì¬»ò¶¯»­½áÊøºóµÄÐÞÕý)
     if (parentPos != QPointF(-1, -1)) {
         QPointF myCenter = endPos + QPointF(NODE_RADIUS, NODE_RADIUS);
         QLineF correctLine(parentPos, myCenter);
@@ -102,7 +96,6 @@ void TreeScene::refreshTreeVisuals(TreeNode* node, QPointF parentPos) {
         }
     }
     else {
-        // ¸ù½ÚµãÃ»ÓÐÁ¬Ïß
         if (node->linkToParent) {
             removeItem(node->linkToParent);
             delete node->linkToParent;
@@ -110,13 +103,12 @@ void TreeScene::refreshTreeVisuals(TreeNode* node, QPointF parentPos) {
         }
     }
 
-    // µÝ¹é´¦Àí×Ó½Úµã£¬´«µÝµ±Ç°½ÚµãµÄÐÂÄ¿±êÎ»ÖÃ×÷Îª parentPos
     QPointF myTargetCenter(node->targetX, node->targetY);
     refreshTreeVisuals(node->left, myTargetCenter);
     refreshTreeVisuals(node->right, myTargetCenter);
 }
 
-// === Ì½Õë¶¯»­ (ÐÞ¸´°æ£º½â¾öÉÁË¸ÎÊÌâ) ===
+// === æŽ¢é’ˆåŠ¨ç”» ===
 void TreeScene::animSearchPath(int targetVal, std::function<void(TreeNode*, TreeNode*, bool)> onFinished) {
     if (!m_probeHalo) {
         m_probeHalo = addEllipse(0, 0, NODE_RADIUS * 2 + 10, NODE_RADIUS * 2 + 10,
@@ -124,14 +116,11 @@ void TreeScene::animSearchPath(int targetVal, std::function<void(TreeNode*, Tree
         m_probeHalo->setZValue(999);
     }
 
-    // 1. Ô¤ÏÈ¼ÆËãÂ·¾¶µÄËùÓÐ¹Ø¼üµã
     QList<QPointF> pathPoints;
-
     TreeNode* curr = root;
     TreeNode* parent = nullptr;
     bool isLeft = false;
 
-    // Æðµã£º¸ù½Úµã
     if (root) {
         pathPoints.append(root->circle->pos() - QPointF(5, 5));
     }
@@ -140,7 +129,7 @@ void TreeScene::animSearchPath(int targetVal, std::function<void(TreeNode*, Tree
     }
 
     while (curr != nullptr) {
-        if (curr->value == targetVal) break; // ÕÒµ½ÁË
+        if (curr->value == targetVal) break;
 
         parent = curr;
         if (targetVal < curr->value) {
@@ -157,20 +146,15 @@ void TreeScene::animSearchPath(int targetVal, std::function<void(TreeNode*, Tree
         }
     }
 
-    // === ¹Ø¼üÐÞ¸´£ºÔÚÏÔÊ¾Ì½ÕëÇ°£¬ÏÈÇ¿ÖÆÉèÖÃÎ»ÖÃµ½Æðµã ===
-    // ÕâÑù¾ÍÏû³ýÁË´Ó"ÉÏÒ»´Î½áÊøÎ»ÖÃ"ÉÁ»Ø"±¾´ÎÆðµã"µÄÊÓ¾õè¦´Ã
     if (!pathPoints.isEmpty()) {
         m_probeHalo->setPos(pathPoints.first());
     }
     m_probeHalo->setVisible(true);
     m_probeHalo->setOpacity(1.0);
 
-    // 2. ¹¹½¨Á¬Ðø¶¯»­×é
     QSequentialAnimationGroup* group = new QSequentialAnimationGroup(this);
 
-    // Èç¹ûÃ»ÓÐÂ·¾¶£¨ÀýÈç¿ÕÊ÷£©£¬Ö±½Ó»Øµ÷
     if (pathPoints.size() <= 1 && !root) {
-        // ¼´Ê¹Ã»¶¯»­£¬Ò²ÒªÑÓ³ÙÒ»Ö¡»Øµ÷£¬±£³ÖÒì²½Âß¼­Ò»ÖÂÐÔ
         QTimer::singleShot(100, [onFinished, parent, curr, isLeft]() {
             onFinished(parent, curr, isLeft);
             });
@@ -180,7 +164,7 @@ void TreeScene::animSearchPath(int targetVal, std::function<void(TreeNode*, Tree
 
     for (int i = 0; i < pathPoints.size() - 1; ++i) {
         QVariantAnimation* move = new QVariantAnimation(group);
-        move->setDuration(500); // ¹ö¶¯ËÙ¶È
+        move->setDuration(500);
         move->setStartValue(pathPoints[i]);
         move->setEndValue(pathPoints[i + 1]);
         move->setEasingCurve(QEasingCurve::InOutQuad);
@@ -190,7 +174,6 @@ void TreeScene::animSearchPath(int targetVal, std::function<void(TreeNode*, Tree
             });
 
         group->addAnimation(move);
-        // ÉÔÎ¢Í£¶ÙÒ»ÏÂ£¬Ä£Äâ"Ë¼¿¼"
         group->addPause(100);
     }
 
@@ -216,65 +199,126 @@ void TreeScene::createVisualNode(TreeNode* node, int x, int y) {
     node->text->setPos((NODE_RADIUS * 2 - b.width()) / 2, (NODE_RADIUS * 2 - b.height()) / 2);
 }
 
+// === æ ¸å¿ƒï¼šéåŽ†åŠ¨ç”»å®žçŽ° (ä¿®å¤ç®­å¤´é€»è¾‘) ===
+
+void TreeScene::addVisitAnim(QSequentialAnimationGroup* group, TreeNode* node, QString& currentStr) {
+    // 1. èŠ‚ç‚¹å˜è‰²é«˜äº®åŠ¨ç”»
+    QVariantAnimation* visit = new QVariantAnimation(group);
+    visit->setDuration(600);
+    visit->setKeyValueAt(0.0, 0);
+    visit->setKeyValueAt(0.2, 1);
+    visit->setKeyValueAt(0.8, 1);
+    visit->setKeyValueAt(1.0, 0);
+
+    QBrush original = node->circle->brush();
+    QBrush visitBrush(QColor(255, 165, 0)); // æ©™è‰²
+
+    // === ä¿®å¤ç‚¹ï¼šæ›´æ™ºèƒ½çš„å­—ç¬¦ä¸²æ‹¼æŽ¥ ===
+    // å¦‚æžœ currentStr ä»¥ ": " ç»“å°¾ (ä¾‹å¦‚ "å‰åºéåŽ†: ")ï¼Œè¯´æ˜Žæ˜¯ç¬¬ä¸€ä¸ªå…ƒç´ ï¼Œä¸åŠ ç®­å¤´
+    // å¦åˆ™ï¼Œå…ˆåŠ ç®­å¤´ï¼Œå†åŠ æ•°å€¼
+    if (!currentStr.endsWith(": ")) {
+        currentStr += " -> ";
+    }
+    currentStr += QString::number(node->value);
+
+    QString displayStr = currentStr;
+
+    connect(visit, &QVariantAnimation::valueChanged, this, [this, node, visitBrush, original](const QVariant& val) {
+        if (val.toInt() == 1) node->circle->setBrush(visitBrush);
+        else node->circle->setBrush(original);
+
+        if (m_probeHalo) m_probeHalo->setPos(node->circle->pos() - QPointF(5, 5));
+        });
+
+    connect(visit, &QVariantAnimation::stateChanged, this, [this, displayStr](QAbstractAnimation::State newState, QAbstractAnimation::State) {
+        if (newState == QAbstractAnimation::Running && m_resultText) {
+            m_resultText->setText(displayStr);
+        }
+        });
+
+    group->addAnimation(visit);
+}
+
+void TreeScene::buildTraversalAnim(QSequentialAnimationGroup* group, TreeNode* node, int type, QString& resultString) {
+    if (!node) return;
+
+    if (type == 0) addVisitAnim(group, node, resultString);
+    if (node->left) buildTraversalAnim(group, node->left, type, resultString);
+    if (type == 1) addVisitAnim(group, node, resultString);
+    if (node->right) buildTraversalAnim(group, node->right, type, resultString);
+    if (type == 2) addVisitAnim(group, node, resultString);
+}
+
+void TreeScene::traverseAnimated(int type) {
+    if (!root) {
+        emit animationFinished();
+        return;
+    }
+
+    if (m_resultText) { removeItem(m_resultText); delete m_resultText; }
+    m_resultText = new QGraphicsSimpleTextItem();
+    QFont font; font.setPointSize(12); font.setBold(true);
+    m_resultText->setFont(font);
+    m_resultText->setBrush(Qt::blue);
+    m_resultText->setPos(20, 20);
+    addItem(m_resultText);
+
+    QString typeName;
+    if (type == 0) typeName = "å‰åºéåŽ†: ";
+    else if (type == 1) typeName = "ä¸­åºéåŽ†: ";
+    else typeName = "åŽåºéåŽ†: ";
+
+    m_resultText->setText(typeName);
+
+    if (!m_probeHalo) {
+        m_probeHalo = addEllipse(0, 0, NODE_RADIUS * 2 + 10, NODE_RADIUS * 2 + 10, QPen(Qt::red, 4), Qt::NoBrush);
+        m_probeHalo->setZValue(999);
+    }
+    m_probeHalo->setVisible(true);
+    m_probeHalo->setPos(root->circle->pos() - QPointF(5, 5));
+
+    QSequentialAnimationGroup* group = new QSequentialAnimationGroup(this);
+    QString currentStr = typeName;
+
+    buildTraversalAnim(group, root, type, currentStr);
+
+    connect(group, &QAbstractAnimation::finished, this, [this, group]() {
+        m_probeHalo->setVisible(false);
+        emit animationFinished();
+        group->deleteLater();
+        });
+
+    group->start();
+}
+
 void TreeScene::insertNodeAnimated(int value, int index) {
     (void)index;
-
-    // ¿ÕÊ÷ÌØÅÐ
     if (!root) {
         root = new TreeNode(value);
         createVisualNode(root, ROOT_X, ROOT_Y);
-        // µ¯³ö¶¯»­
         root->circle->setScale(0);
         QVariantAnimation* anim = new QVariantAnimation(this);
-        anim->setDuration(500);
-        anim->setStartValue(0.0);
-        anim->setEndValue(1.0);
+        anim->setDuration(500); anim->setStartValue(0.0); anim->setEndValue(1.0);
         anim->setEasingCurve(QEasingCurve::OutBack);
         connect(anim, &QVariantAnimation::valueChanged, this, [this](const QVariant& val) {
-            if (root && root->circle) {
-                root->circle->setScale(val.toFloat());
-                root->circle->setTransformOriginPoint(NODE_RADIUS, NODE_RADIUS);
-            }
+            if (root && root->circle) { root->circle->setScale(val.toFloat()); root->circle->setTransformOriginPoint(NODE_RADIUS, NODE_RADIUS); }
             });
         connect(anim, &QVariantAnimation::finished, this, &BaseScene::animationFinished);
         anim->start();
         return;
     }
-
     animSearchPath(value, [this, value](TreeNode* parent, TreeNode* current, bool isLeft) {
-        if (current != nullptr) {
-            // ÒÑ´æÔÚ£º¸ßÁÁÒ»ÏÂ
-            searchNodeAnimated(value, 0);
-            return;
-        }
-
+        if (current != nullptr) { searchNodeAnimated(value, 0); return; }
         if (m_probeHalo) m_probeHalo->setVisible(false);
-
-        // Âß¼­²åÈë
         TreeNode* newNode = new TreeNode(value);
-        if (isLeft) parent->left = newNode;
-        else parent->right = newNode;
-
-        // 1. È«¾ÖÖØÐÂ¼ÆËã²¼¾Ö
+        if (isLeft) parent->left = newNode; else parent->right = newNode;
         calculateLayout(root, ROOT_X, ROOT_Y, 200);
-
-        // 2. ´´½¨¿ÉÊÓÔªËØ
         createVisualNode(newNode, newNode->targetX, newNode->targetY);
-
-        // 3. ³õÊ¼×´Ì¬£ºÍ¸Ã÷£¬Î»ÖÃÔÚ¸¸½Úµã´¦
-        if (parent && parent->circle) {
-            newNode->circle->setPos(parent->circle->pos());
-        }
+        if (parent && parent->circle) newNode->circle->setPos(parent->circle->pos());
         newNode->circle->setOpacity(0);
-
-        // 4. Ë¢ÐÂÈ«Ê÷ (ÕâÒ»²½»á°Ñ newNode ÒÆ¶¯µ½ targetX/Y)
         refreshTreeVisuals(root, QPointF(-1, -1));
-
-        // 5. ¶îÍâµÄÐÂ½Úµã³öÏÖ¶¯»­
         QVariantAnimation* appear = new QVariantAnimation(this);
-        appear->setDuration(600);
-        appear->setStartValue(0.0);
-        appear->setEndValue(1.0);
+        appear->setDuration(600); appear->setStartValue(0.0); appear->setEndValue(1.0);
         connect(appear, &QVariantAnimation::valueChanged, this, [newNode](const QVariant& val) {
             if (newNode && newNode->circle) newNode->circle->setOpacity(val.toFloat());
             });
@@ -283,7 +327,44 @@ void TreeScene::insertNodeAnimated(int value, int index) {
         });
 }
 
-// ¸¨Öú£º±ê¼ÇÉ¾³ý£¬½«Í¼ÐÎÒÆÈëÀ¬»øÏä
+void TreeScene::removeNodeAnimated(int value, int index) {
+    (void)index;
+    animSearchPath(value, [this, value](TreeNode* parent, TreeNode* curr, bool) {
+        if (m_probeHalo) m_probeHalo->setVisible(false);
+        if (!curr && parent && parent->value != value && (!root || root->value != value)) { emit animationFinished(); return; }
+        bool deleted = false;
+        root = deleteNodeRecursive(root, value, deleted);
+        if (deleted) {
+            calculateLayout(root, ROOT_X, ROOT_Y, 200);
+            processTrashBin();
+            refreshTreeVisuals(root, QPointF(-1, -1));
+            QTimer::singleShot(650, this, &BaseScene::animationFinished);
+        }
+        else { emit animationFinished(); }
+        });
+}
+
+void TreeScene::searchNodeAnimated(int value, int index) {
+    (void)index;
+    animSearchPath(value, [this](TreeNode* p, TreeNode* curr, bool) {
+        if (m_probeHalo) m_probeHalo->setVisible(false);
+        if (curr && curr->circle) {
+            QBrush original = curr->circle->brush();
+            curr->circle->setBrush(QBrush(Qt::green));
+            QTimer::singleShot(1000, [this, curr, original]() {
+                if (curr && curr->circle) curr->circle->setBrush(original);
+                emit animationFinished();
+                });
+        }
+        else { emit animationFinished(); }
+        });
+}
+
+TreeNode* TreeScene::findMin(TreeNode* node) {
+    while (node->left != nullptr) node = node->left;
+    return node;
+}
+
 void TreeScene::markForDeletion(TreeNode* node) {
     if (!node) return;
     if (node->circle) m_trashItems.append(node->circle);
@@ -292,138 +373,35 @@ void TreeScene::markForDeletion(TreeNode* node) {
 
 void TreeScene::processTrashBin() {
     if (m_trashItems.isEmpty()) return;
-
-    // ²¥·Åµ­³ö¶¯»­
     QVariantAnimation* anim = new QVariantAnimation(this);
-    anim->setDuration(600);
-    anim->setStartValue(1.0);
-    anim->setEndValue(0.0);
-
+    anim->setDuration(600); anim->setStartValue(1.0); anim->setEndValue(0.0);
     QList<QGraphicsItem*> items = m_trashItems;
     m_trashItems.clear();
-
     connect(anim, &QVariantAnimation::valueChanged, this, [items](const QVariant& val) {
-        for (auto item : items) {
-            if (item) item->setOpacity(val.toFloat());
-        }
+        for (auto item : items) if (item) item->setOpacity(val.toFloat());
         });
-
     connect(anim, &QVariantAnimation::finished, this, [this, items, anim]() {
-        for (auto item : items) {
-            if (item) {
-                this->removeItem(item);
-                delete item;
-            }
-        }
+        for (auto item : items) { if (item) { this->removeItem(item); delete item; } }
         anim->deleteLater();
         });
-
     anim->start();
 }
 
-TreeNode* TreeScene::findMin(TreeNode* node) {
-    while (node->left != nullptr) node = node->left;
-    return node;
-}
-
-// µÝ¹éÉ¾³ý
 TreeNode* TreeScene::deleteNodeRecursive(TreeNode* root, int value, bool& deleted) {
     if (root == nullptr) return root;
-
-    if (value < root->value) {
-        root->left = deleteNodeRecursive(root->left, value, deleted);
-    }
-    else if (value > root->value) {
-        root->right = deleteNodeRecursive(root->right, value, deleted);
-    }
+    if (value < root->value) root->left = deleteNodeRecursive(root->left, value, deleted);
+    else if (value > root->value) root->right = deleteNodeRecursive(root->right, value, deleted);
     else {
         deleted = true;
-
-        // Case 1: ÎÞ×Ó½Úµã
-        if (root->left == nullptr && root->right == nullptr) {
-            markForDeletion(root);
-            delete root;
-            return nullptr;
-        }
-        // Case 2: µ¥×Ó½Úµã
-        else if (root->left == nullptr) {
-            TreeNode* temp = root->right;
-            markForDeletion(root);
-            delete root;
-            return temp;
-        }
-        else if (root->right == nullptr) {
-            TreeNode* temp = root->left;
-            markForDeletion(root);
-            delete root;
-            return temp;
-        }
-        // Case 3: Ë«×Ó½Úµã
+        if (root->left == nullptr && root->right == nullptr) { markForDeletion(root); delete root; return nullptr; }
+        else if (root->left == nullptr) { TreeNode* temp = root->right; markForDeletion(root); delete root; return temp; }
+        else if (root->right == nullptr) { TreeNode* temp = root->left; markForDeletion(root); delete root; return temp; }
         else {
             TreeNode* temp = findMin(root->right);
-
-            // ÖµÌæ»»£ºÊÓ¾õÉÏ±£Áô root£¬µ«±ä³ÉÁË temp µÄÖµ
             root->value = temp->value;
             if (root->text) root->text->setText(QString::number(root->value));
-
-            // µÝ¹éÉ¾³ý temp
             root->right = deleteNodeRecursive(root->right, temp->value, deleted);
         }
     }
     return root;
-}
-
-void TreeScene::removeNodeAnimated(int value, int index) {
-    (void)index;
-
-    animSearchPath(value, [this, value](TreeNode* parent, TreeNode* curr, bool) {
-        if (m_probeHalo) m_probeHalo->setVisible(false);
-
-        if (!curr && parent && parent->value != value && (!root || root->value != value)) {
-            emit animationFinished();
-            return;
-        }
-
-        bool deleted = false;
-        // 1. Âß¼­É¾³ý
-        root = deleteNodeRecursive(root, value, deleted);
-
-        if (deleted) {
-            // 2. ÖØÐÂ¼ÆËã²¼¾Ö
-            calculateLayout(root, ROOT_X, ROOT_Y, 200);
-
-            // 3. ²¥·Å£ºÀ¬»øÏäµ­³ö
-            processTrashBin();
-
-            // 4. ¹Ø¼ü£ºÇ¿ÖÆË¢ÐÂËùÓÐ´æ»î½ÚµãµÄÁ¬ÏßºÍÎ»ÖÃ
-            refreshTreeVisuals(root, QPointF(-1, -1));
-
-            QTimer::singleShot(650, this, &BaseScene::animationFinished);
-        }
-        else {
-            emit animationFinished();
-        }
-        });
-}
-
-void TreeScene::searchNodeAnimated(int value, int index) {
-    (void)index;
-    animSearchPath(value, [this](TreeNode* p, TreeNode* curr, bool) {
-        if (m_probeHalo) m_probeHalo->setVisible(false);
-
-        if (curr && curr->circle) {
-            // ÂÌÉ«¸ßÁÁ
-            QBrush original = curr->circle->brush();
-            curr->circle->setBrush(QBrush(Qt::green));
-
-            QTimer::singleShot(1000, [this, curr, original]() {
-                // »Ö¸´ÑÕÉ«
-                if (curr && curr->circle) curr->circle->setBrush(original);
-                emit animationFinished();
-                });
-        }
-        else {
-            emit animationFinished();
-        }
-        });
 }

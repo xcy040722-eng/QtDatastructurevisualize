@@ -2,7 +2,7 @@
 #include "basescene.h"
 #include "linearlistscene.h"
 #include "treescene.h" 
-#include "huffmanscene.h" // === 包含哈夫曼场景 ===
+#include "huffmanscene.h" 
 #include "controlpanel.h"
 #include <QDebug>
 #include <QMessageBox>
@@ -14,11 +14,12 @@ Controller::Controller(BaseScene* scene, ControlPanel* panel, QObject* parent)
     m_linearScene = scene;
     m_scene = m_linearScene;
     m_treeScene = new TreeScene(this);
-    m_huffmanScene = new HuffmanScene(this); // === 初始化 ===
+    m_huffmanScene = new HuffmanScene(this);
 
     connect(m_panel, &ControlPanel::insertRequested, this, &Controller::onInsertRequested);
     connect(m_panel, &ControlPanel::removeRequested, this, &Controller::onRemoveRequested);
     connect(m_panel, &ControlPanel::findRequested, this, &Controller::onFindRequested);
+    connect(m_panel, &ControlPanel::traverseRequested, this, &Controller::onTraverseRequested);
     connect(m_panel, &ControlPanel::resetRequested, this, &Controller::onResetRequested);
     connect(m_panel, &ControlPanel::structureChanged, this, &Controller::onStructureChanged);
 
@@ -39,6 +40,11 @@ void Controller::unlockUI() {
 
 void Controller::onAnimationFinished() {
     unlockUI();
+    // === 新增：动画结束后检查是否有延迟消息 ===
+    if (!m_endAnimationMsg.isEmpty()) {
+        showError(m_endAnimationMsg);
+        m_endAnimationMsg.clear();
+    }
 }
 
 void Controller::showError(const QString& msg) {
@@ -59,6 +65,7 @@ void Controller::onStructureChanged(int idx) {
     if (idx < 0 || idx > 4) return;
     unlockUI();
     m_data.clear();
+    m_endAnimationMsg.clear(); // 清理残留消息
     m_currentType = static_cast<StructType>(idx);
 
     if (idx == TREE) {
@@ -100,7 +107,6 @@ void Controller::onInsertRequested(const QString& valueStr) {
         return;
     }
 
-    // 哈夫曼允许重复权重，所以只在其他模式查重
     if (m_currentType != STACK && m_currentType != HUFFMAN && findIndex(val) != -1) {
         showError(QStringLiteral("该数值已存在！"));
         return;
@@ -115,11 +121,9 @@ void Controller::onInsertRequested(const QString& valueStr) {
 void Controller::onRemoveRequested(const QString& valueStr) {
     if (m_isAnimating) return;
 
-    // === 哈夫曼特判：执行合并 ===
     if (m_currentType == HUFFMAN) {
-        // 不需要输入值
         lockUI();
-        m_scene->removeNodeAnimated(0, 0); // 这里的参数无意义，仅作为触发信号
+        m_scene->removeNodeAnimated(0, 0);
         return;
     }
 
@@ -166,11 +170,31 @@ void Controller::onFindRequested(const QString& valueStr) {
     }
 
     int index = findIndex(val);
-    if (index != -1 || m_currentType == TREE) {
+
+    // === 修复点：BST 查找未找到时的处理 ===
+    if (index != -1) {
+        // 找到了
         lockUI();
         m_scene->searchNodeAnimated(val, index);
     }
     else {
-        showError(QStringLiteral("未找到该数值！"));
+        // 没找到
+        if (m_currentType == TREE) {
+            // BST：先播动画（探针走到空），动画结束后再弹窗
+            lockUI();
+            m_endAnimationMsg = QStringLiteral("未找到该数值！");
+            m_scene->searchNodeAnimated(val, index);
+        }
+        else {
+            // 线性表：直接弹窗（因为线性表没找到通常不播动画，或者直接报错）
+            showError(QStringLiteral("未找到该数值！"));
+        }
     }
+}
+
+void Controller::onTraverseRequested(int type) {
+    if (m_isAnimating) return;
+    if (m_currentType != TREE) return;
+    lockUI();
+    m_scene->traverseAnimated(type);
 }

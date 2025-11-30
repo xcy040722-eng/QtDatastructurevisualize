@@ -7,6 +7,7 @@
 #include <QDebug>
 #include <QMessageBox>
 #include <QGraphicsView>
+#include <QScrollBar> // === 新增 ===
 
 Controller::Controller(BaseScene* scene, ControlPanel* panel, QObject* parent)
     : QObject(parent), m_panel(panel)
@@ -40,7 +41,6 @@ void Controller::unlockUI() {
 
 void Controller::onAnimationFinished() {
     unlockUI();
-    // === 新增：动画结束后检查是否有延迟消息 ===
     if (!m_endAnimationMsg.isEmpty()) {
         showError(m_endAnimationMsg);
         m_endAnimationMsg.clear();
@@ -51,12 +51,21 @@ void Controller::showError(const QString& msg) {
     QMessageBox::warning(m_panel, QStringLiteral("提示"), msg);
 }
 
+// === 核心修复：切换场景时重置视口 ===
 void Controller::switchScene(BaseScene* newScene) {
     if (m_scene == newScene) return;
+
     m_scene = newScene;
+
     QGraphicsView* view = parent()->findChild<QGraphicsView*>();
     if (view) {
         view->setScene(m_scene);
+
+        // 强制归位到左上角
+        view->centerOn(0, 0);
+        if (view->horizontalScrollBar()) view->horizontalScrollBar()->setValue(0);
+        if (view->verticalScrollBar()) view->verticalScrollBar()->setValue(0);
+
         view->update();
     }
 }
@@ -65,7 +74,7 @@ void Controller::onStructureChanged(int idx) {
     if (idx < 0 || idx > 4) return;
     unlockUI();
     m_data.clear();
-    m_endAnimationMsg.clear(); // 清理残留消息
+    m_endAnimationMsg.clear();
     m_currentType = static_cast<StructType>(idx);
 
     if (idx == TREE) {
@@ -170,26 +179,20 @@ void Controller::onFindRequested(const QString& valueStr) {
     }
 
     int index = findIndex(val);
-
-    // === 修复点：BST 查找未找到时的处理 ===
     if (index != -1) {
-        // 找到了
         lockUI();
         m_scene->searchNodeAnimated(val, index);
     }
     else {
-        // 没找到
         if (m_currentType == TREE) {
-            // BST：先播动画（探针走到空），动画结束后再弹窗
             lockUI();
             m_endAnimationMsg = QStringLiteral("未找到该数值！");
             m_scene->searchNodeAnimated(val, index);
         }
         else {
-            // 线性表：直接弹窗（因为线性表没找到通常不播动画，或者直接报错）
             showError(QStringLiteral("未找到该数值！"));
         }
-    }  
+    }
 }
 
 void Controller::onTraverseRequested(int type) {

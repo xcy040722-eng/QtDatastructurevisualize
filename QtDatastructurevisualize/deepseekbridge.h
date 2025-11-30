@@ -35,9 +35,11 @@ private:
         "DSL 语法定义如下：\n"
         "1. 创建/重置结构:\n"
         "   - new bst [1,2,3]\n"
+        "   - new array [1,2,3]\n"
         "   - new list [1,2,3]\n"
         "   - new stack [1,2]\n"
         "   - new huffman [5,10,3]\n"
+        "   - new avl [1,2,3]\n"
         "2. 操作:\n"
         "   - insert 100 (栈也用这个或 push)\n"
         "   - delete 50 (栈也用这个或 pop)\n"
@@ -49,6 +51,7 @@ private:
         "\n"
         "【重要规则】\n"
         "- 你必须严格且只输出 DSL 指令字符串。\n"
+        "-不可以输出空序列，如new bst [],new stack [],禁止！"
         "- 不要输出任何 Markdown 格式（如 ```json），不要输出解释性文字。\n"
         "- 如果用户输入无法理解或无关，输出 'ERROR'。";
 };

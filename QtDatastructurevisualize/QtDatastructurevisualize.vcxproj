@@ -93,6 +93,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="arraylistmodel.cpp" />
+    <ClCompile Include="avl_logic.cpp" />
+    <ClCompile Include="avl_scene.cpp" />
     <ClCompile Include="basescene.cpp" />
     <ClCompile Include="controller.cpp" />
     <ClCompile Include="deepseekbridge.cpp" />
@@ -135,6 +137,11 @@
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="deepseekbridge.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="avl_defs.h" />
+    <ClInclude Include="avl_logic.h" />
+    <QtMoc Include="avl_scene.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">

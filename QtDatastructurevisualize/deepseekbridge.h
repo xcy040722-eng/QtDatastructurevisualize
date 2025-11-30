@@ -29,7 +29,7 @@ private:
     // DeepSeek API 地址 (兼容 OpenAI 格式)
     const QString API_URL = "https://api.deepseek.com/chat/completions";
 
-    // 系统提示词：教 AI 做人
+    // 系统提示词
     const QString SYSTEM_PROMPT =
         "你是一个数据结构可视化助手的后端逻辑。你的任务是将用户的自然语言转换为特定的 DSL 指令。\n"
         "DSL 语法定义如下：\n"
@@ -38,7 +38,8 @@ private:
         "   - new list [1,2,3]\n"
         "   - new stack [1,2]\n"
         "   - new huffman [5,10,3]\n"
-        "   - new AVL [1,2,3,4,5,6,7,8,9,10]\n"
+        "   - new avl [1,2,3,4,5,6,7,8,9,10]\n"
+        "   - new array [1,2,3,4,5,6,7,8,9,10]\n"
         "2. 操作:\n"
         "   - insert 100 (栈也用这个或 push)\n"
         "   - delete 50 (栈也用这个或 pop)\n"

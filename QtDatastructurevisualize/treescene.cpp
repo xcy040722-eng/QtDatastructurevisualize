@@ -124,7 +124,6 @@ TreeNode* TreeScene::insertAVLRecursive(TreeNode* node, TreeNode* newNode) {
 void TreeScene::insertNodeAnimated(int value, int index) {
     (void)index;
 
-    // 1. 如果是空树，直接作为根节点插入
     if (!root) {
         root = new TreeNode(value);
         createVisualNode(root, ROOT_X, ROOT_Y);
@@ -133,60 +132,41 @@ void TreeScene::insertNodeAnimated(int value, int index) {
         anim->setDuration(500); anim->setStartValue(0.0); anim->setEndValue(1.0);
         anim->setEasingCurve(QEasingCurve::OutBack);
         connect(anim, &QVariantAnimation::valueChanged, this, [this](const QVariant& val) {
-            if (root && root->circle) {
-                root->circle->setScale(val.toFloat());
-                root->circle->setTransformOriginPoint(NODE_RADIUS, NODE_RADIUS);
-            }
+            if (root && root->circle) { root->circle->setScale(val.toFloat()); root->circle->setTransformOriginPoint(NODE_RADIUS, NODE_RADIUS); }
             });
         connect(anim, &QVariantAnimation::finished, this, &BaseScene::animationFinished);
         anim->start();
         return;
     }
 
-    // 2. 非空树，寻找插入位置
     animSearchPath(value, [this, value](TreeNode* parent, TreeNode* current, bool isLeft) {
-        // A. 如果当前位置已有节点，说明是重复插入
-        if (current != nullptr) {
-            searchNodeAnimated(value, 0); // 转为查找动画
-            return;
-        }
-
+        if (current != nullptr) { searchNodeAnimated(value, 0); return; }
         if (m_probeHalo) m_probeHalo->setVisible(false);
 
-        // B. 创建新节点
         TreeNode* newNode = new TreeNode(value);
         createVisualNode(newNode, 0, 0);
-        // 视觉位置初始化：从父节点位置长出来
         if (parent && parent->circle) newNode->circle->setPos(parent->circle->pos());
         newNode->circle->setOpacity(0);
 
-        // === 关键修复与逻辑分支 ===
         if (m_isAVL) {
-            // AVL 模式：递归插入并自动旋转平衡 (不需要手动设置 parent->left/right)
             root = insertAVLRecursive(root, newNode);
         }
         else {
-            // 普通 BST 模式：直接挂接
-            // === 修复：增加空指针检查，防止闪退 ===
+            // === 这里的 parent 现在是正确的了，不会是 nullptr ===
             if (!parent) {
-                // 理论上不应发生（除非树为空但代码走到这），安全起见直接清理并返回
-                delete newNode; // 防止内存泄漏
+                // 兜底保护
                 if (newNode->circle) { removeItem(newNode->circle); delete newNode->circle; }
+                delete newNode;
                 emit animationFinished();
                 return;
             }
-
             if (isLeft) parent->left = newNode;
             else parent->right = newNode;
         }
 
-        // 1. 重新计算布局 (AVL 旋转后结构变了，这里会算出新坐标)
         calculateLayout(root, ROOT_X, ROOT_Y, 200);
-
-        // 2. 刷新全树视觉 (节点飞向新位置)
         refreshTreeVisuals(root, QPointF(-1, -1));
 
-        // 3. 新节点淡入
         QVariantAnimation* appear = new QVariantAnimation(this);
         appear->setDuration(600); appear->setStartValue(0.0); appear->setEndValue(1.0);
         connect(appear, &QVariantAnimation::valueChanged, this, [newNode](const QVariant& val) {
@@ -215,6 +195,7 @@ void TreeScene::refreshTreeVisuals(TreeNode* node, QPointF parentPos) {
         anim->setDuration(600); anim->setStartValue(node->circle->pos()); anim->setEndValue(endPos);
         anim->setEasingCurve(QEasingCurve::OutCubic);
 
+        // 捕获 this
         connect(anim, &QVariantAnimation::valueChanged, this, [this, node](const QVariant& val) {
             if (node && node->circle) node->circle->setPos(val.toPointF());
             });
@@ -252,12 +233,27 @@ void TreeScene::animSearchPath(int targetVal, std::function<void(TreeNode*, Tree
     }
     QList<QPointF> pathPoints;
     TreeNode* curr = root;
+
+    // 记录查找过程中的变量
+    TreeNode* parent = nullptr;
+    bool isLeft = false;
+
     if (root) pathPoints.append(root->circle->pos() - QPointF(5, 5));
     else pathPoints.append(QPointF(ROOT_X - NODE_RADIUS - 5, ROOT_Y - NODE_RADIUS - 5));
 
     while (curr != nullptr) {
         if (curr->value == targetVal) break;
-        if (targetVal < curr->value) curr = curr->left; else curr = curr->right;
+
+        parent = curr; // 记录父节点
+        if (targetVal < curr->value) {
+            curr = curr->left;
+            isLeft = true;
+        }
+        else {
+            curr = curr->right;
+            isLeft = false;
+        }
+
         if (curr) pathPoints.append(curr->circle->pos() - QPointF(5, 5));
     }
 
@@ -266,7 +262,10 @@ void TreeScene::animSearchPath(int targetVal, std::function<void(TreeNode*, Tree
 
     QSequentialAnimationGroup* group = new QSequentialAnimationGroup(this);
     if (pathPoints.size() <= 1 && !root) {
-        QTimer::singleShot(100, [onFinished]() { onFinished(nullptr, nullptr, false); });
+        // 即使没动画，也要正确回调
+        QTimer::singleShot(100, [onFinished, parent, curr, isLeft]() {
+            onFinished(parent, curr, isLeft);
+            });
         group->deleteLater();
         return;
     }
@@ -280,10 +279,9 @@ void TreeScene::animSearchPath(int targetVal, std::function<void(TreeNode*, Tree
         group->addAnimation(move); group->addPause(100);
     }
 
-    // === 关键修复：添加了 [group] 捕获 ===
-    connect(group, &QAbstractAnimation::finished, this, [this, onFinished, group]() {
-        // 为了简化参数传递，onFinished 不再依赖准确的 parent/curr (反正插入会重新算)
-        onFinished(nullptr, nullptr, false);
+    // === 关键修复：正确传递 parent, curr, isLeft ===
+    connect(group, &QAbstractAnimation::finished, this, [this, onFinished, parent, curr, isLeft, group]() {
+        onFinished(parent, curr, isLeft);
         group->deleteLater();
         });
     group->start();
@@ -317,6 +315,7 @@ void TreeScene::removeNodeAnimated(int value, int index) {
 void TreeScene::searchNodeAnimated(int value, int index) {
     (void)index;
     animSearchPath(value, [this, value](TreeNode*, TreeNode*, bool) {
+        // 手动查找节点以高亮 (回调参数 curr 可能是 nullptr 如果 animSearchPath 逻辑有变，这里双重保险)
         TreeNode* curr = root;
         while (curr) {
             if (curr->value == value) break;

@@ -108,7 +108,7 @@ void TreeScene::refreshTreeVisuals(TreeNode* node, QPointF parentPos) {
     refreshTreeVisuals(node->right, myTargetCenter);
 }
 
-// === 探针动画 ===
+// === 探针动画 (查找/插入/删除用 - 始终从根开始) ===
 void TreeScene::animSearchPath(int targetVal, std::function<void(TreeNode*, TreeNode*, bool)> onFinished) {
     if (!m_probeHalo) {
         m_probeHalo = addEllipse(0, 0, NODE_RADIUS * 2 + 10, NODE_RADIUS * 2 + 10,
@@ -199,10 +199,9 @@ void TreeScene::createVisualNode(TreeNode* node, int x, int y) {
     node->text->setPos((NODE_RADIUS * 2 - b.width()) / 2, (NODE_RADIUS * 2 - b.height()) / 2);
 }
 
-// === 核心：遍历动画实现 (修复箭头逻辑) ===
+// === 遍历功能 ===
 
 void TreeScene::addVisitAnim(QSequentialAnimationGroup* group, TreeNode* node, QString& currentStr) {
-    // 1. 节点变色高亮动画
     QVariantAnimation* visit = new QVariantAnimation(group);
     visit->setDuration(600);
     visit->setKeyValueAt(0.0, 0);
@@ -213,9 +212,6 @@ void TreeScene::addVisitAnim(QSequentialAnimationGroup* group, TreeNode* node, Q
     QBrush original = node->circle->brush();
     QBrush visitBrush(QColor(255, 165, 0)); // 橙色
 
-    // === 修复点：更智能的字符串拼接 ===
-    // 如果 currentStr 以 ": " 结尾 (例如 "前序遍历: ")，说明是第一个元素，不加箭头
-    // 否则，先加箭头，再加数值
     if (!currentStr.endsWith(": ")) {
         currentStr += " -> ";
     }
@@ -249,6 +245,29 @@ void TreeScene::buildTraversalAnim(QSequentialAnimationGroup* group, TreeNode* n
     if (type == 2) addVisitAnim(group, node, resultString);
 }
 
+// === 新增：计算遍历的第一个节点 ===
+TreeNode* TreeScene::getFirstNode(TreeNode* node, int type) {
+    if (!node) return nullptr;
+
+    // 前序 (0): 根 -> 左 -> 右。第一个肯定是根。
+    if (type == 0) return node;
+
+    // 中序 (1): 左 -> 根 -> 右。第一个是最左下角的节点。
+    if (type == 1) {
+        if (node->left) return getFirstNode(node->left, 1);
+        return node;
+    }
+
+    // 后序 (2): 左 -> 右 -> 根。第一个是左子树的最深左/右节点。
+    if (type == 2) {
+        if (node->left) return getFirstNode(node->left, 2);
+        if (node->right) return getFirstNode(node->right, 2);
+        return node;
+    }
+
+    return node;
+}
+
 void TreeScene::traverseAnimated(int type) {
     if (!root) {
         emit animationFinished();
@@ -275,7 +294,15 @@ void TreeScene::traverseAnimated(int type) {
         m_probeHalo->setZValue(999);
     }
     m_probeHalo->setVisible(true);
-    m_probeHalo->setPos(root->circle->pos() - QPointF(5, 5));
+
+    // === 关键修改：探针直接出现在遍历序列的第一个节点 ===
+    TreeNode* firstNode = getFirstNode(root, type);
+    if (firstNode && firstNode->circle) {
+        m_probeHalo->setPos(firstNode->circle->pos() - QPointF(5, 5));
+    }
+    else {
+        m_probeHalo->setPos(root->circle->pos() - QPointF(5, 5));
+    }
 
     QSequentialAnimationGroup* group = new QSequentialAnimationGroup(this);
     QString currentStr = typeName;
@@ -290,6 +317,8 @@ void TreeScene::traverseAnimated(int type) {
 
     group->start();
 }
+
+// === 标准操作 ===
 
 void TreeScene::insertNodeAnimated(int value, int index) {
     (void)index;
@@ -307,6 +336,7 @@ void TreeScene::insertNodeAnimated(int value, int index) {
         anim->start();
         return;
     }
+    // 插入操作依旧使用 animSearchPath，所以探针会从根节点开始
     animSearchPath(value, [this, value](TreeNode* parent, TreeNode* current, bool isLeft) {
         if (current != nullptr) { searchNodeAnimated(value, 0); return; }
         if (m_probeHalo) m_probeHalo->setVisible(false);

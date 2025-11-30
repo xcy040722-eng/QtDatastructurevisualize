@@ -189,7 +189,7 @@ void Controller::onFindRequested(const QString& valueStr) {
             // 线性表：直接弹窗（因为线性表没找到通常不播动画，或者直接报错）
             showError(QStringLiteral("未找到该数值！"));
         }
-    }
+    }  
 }
 
 void Controller::onTraverseRequested(int type) {

@@ -8,7 +8,6 @@
 #include <QString>
 #include <QSequentialAnimationGroup> 
 
-// 树节点结构体
 struct TreeNode {
     int value;
     TreeNode* left = nullptr;
@@ -36,13 +35,11 @@ public:
     void removeNodeAnimated(int value, int index) override;
     void searchNodeAnimated(int value, int index) override;
 
-    // 遍历接口
     void traverseAnimated(int type) override;
 
 private:
     TreeNode* root = nullptr;
     QGraphicsEllipseItem* m_probeHalo = nullptr;
-    // 遍历结果显示文本
     QGraphicsSimpleTextItem* m_resultText = nullptr;
 
     QList<QGraphicsItem*> m_trashItems;
@@ -63,7 +60,10 @@ private:
     void markForDeletion(TreeNode* node);
     void processTrashBin();
 
-    // === 遍历辅助函数 (注意：它们必须是普通成员函数，不能是 static) ===
+    // === 遍历辅助 ===
     void buildTraversalAnim(QSequentialAnimationGroup* group, TreeNode* node, int type, QString& resultString);
     void addVisitAnim(QSequentialAnimationGroup* group, TreeNode* node, QString& currentStr);
+
+    // === 新增：获取遍历序列的第一个节点 ===
+    TreeNode* getFirstNode(TreeNode* node, int type);
 };

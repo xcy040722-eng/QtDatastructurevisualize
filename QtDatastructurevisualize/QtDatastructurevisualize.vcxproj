@@ -95,6 +95,7 @@
     <ClCompile Include="arraylistmodel.cpp" />
     <ClCompile Include="basescene.cpp" />
     <ClCompile Include="controller.cpp" />
+    <ClCompile Include="huffmanscene.cpp" />
     <ClCompile Include="linearlistscene.cpp" />
     <ClCompile Include="models\linkedlistmodel.cpp" />
     <ClCompile Include="stackmodel.cpp" />
@@ -127,6 +128,9 @@
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="treescene.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <QtMoc Include="huffmanscene.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">

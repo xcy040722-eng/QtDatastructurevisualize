@@ -22,12 +22,13 @@ void ControlPanel::setupUi() {
     m_structCombo->addItem(QStringLiteral("链表 (Linked List)"));
     m_structCombo->addItem(QStringLiteral("顺序表 (Array List)"));
     m_structCombo->addItem(QStringLiteral("栈 (Stack)"));
-    // === 新增：二叉搜索树 ===
     m_structCombo->addItem(QStringLiteral("二叉搜索树 (BST)"));
+    // === 新增 ===
+    m_structCombo->addItem(QStringLiteral("哈夫曼树 (Huffman)"));
 
     mainLayout->addWidget(m_structCombo);
 
-    mainLayout->addWidget(new QLabel(QStringLiteral("<b>节点数值:</b>")));
+    mainLayout->addWidget(new QLabel(QStringLiteral("<b>节点数值/权重:</b>")));
     m_valueEdit = new QLineEdit();
     m_valueEdit->setPlaceholderText(QStringLiteral("请输入整数"));
     mainLayout->addWidget(m_valueEdit);
@@ -72,9 +73,17 @@ void ControlPanel::setupConnections() {
 }
 
 void ControlPanel::updateButtonTexts(int index) {
+    m_findBtn->setEnabled(true);
+
     if (index == 2) { // Stack
         m_insertBtn->setText(QStringLiteral("入栈 (Push)"));
         m_removeBtn->setText(QStringLiteral("出栈 (Pop)"));
+        m_findBtn->setEnabled(false);
+        m_findBtn->setText(QStringLiteral("查找 (不支持)"));
+    }
+    else if (index == 4) { // Huffman
+        m_insertBtn->setText(QStringLiteral("添加叶子 (Add Leaf)"));
+        m_removeBtn->setText(QStringLiteral("执行合并 (Merge Step)"));
         m_findBtn->setEnabled(false);
         m_findBtn->setText(QStringLiteral("查找 (不支持)"));
     }
@@ -82,7 +91,6 @@ void ControlPanel::updateButtonTexts(int index) {
         // 链表、顺序表、BST
         m_insertBtn->setText(QStringLiteral("插入"));
         m_removeBtn->setText(QStringLiteral("删除"));
-        m_findBtn->setEnabled(true);
         m_findBtn->setText(QStringLiteral("查找"));
     }
 }
@@ -94,7 +102,7 @@ void ControlPanel::setButtonsEnabled(bool enable) {
     m_structCombo->setEnabled(enable);
 
     int currentIdx = m_structCombo->currentIndex();
-    if (currentIdx == 2) {
+    if (currentIdx == 2 || currentIdx == 4) {
         m_findBtn->setEnabled(false);
     }
     else {

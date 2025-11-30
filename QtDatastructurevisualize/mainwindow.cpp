@@ -2,6 +2,7 @@
 #include "controlpanel.h"
 #include "linearlistscene.h"
 #include "treescene.h" // === 关键：包含树场景 ===
+#include "huffmanscene.h" //==新增：哈夫曼==
 #include "controller.h"
 #include <QGraphicsView>
 #include <QHBoxLayout>

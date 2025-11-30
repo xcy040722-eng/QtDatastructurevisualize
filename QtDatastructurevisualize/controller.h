@@ -19,23 +19,20 @@ public slots:
     void onAnimationFinished();
 
 private:
-    BaseScene* m_scene = nullptr; // 当前活跃的场景
+    BaseScene* m_scene = nullptr;
     ControlPanel* m_panel = nullptr;
 
-    // 场景缓存
     BaseScene* m_linearScene = nullptr;
     BaseScene* m_treeScene = nullptr;
+    BaseScene* m_huffmanScene = nullptr; // === 新增 ===
 
     std::vector<int> m_data;
-    enum StructType { LINKED = 0, ARRAY = 1, STACK = 2, TREE = 3 } m_currentType = LINKED;
+    enum StructType { LINKED = 0, ARRAY = 1, STACK = 2, TREE = 3, HUFFMAN = 4 } m_currentType = LINKED;
     bool m_isAnimating = false;
 
     int findIndex(int value);
     void lockUI();
     void unlockUI();
-
     void showError(const QString& msg);
-
-    // 切换场景方法
     void switchScene(BaseScene* newScene);
 };

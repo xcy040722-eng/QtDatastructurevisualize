@@ -70,6 +70,9 @@
     <ClCompile Include="treescene.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="huffmanscene.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="mainwindow.h">
@@ -100,6 +103,9 @@
       <Filter>Header Files</Filter>
     </QtMoc>
     <QtMoc Include="treescene.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="huffmanscene.h">
       <Filter>Header Files</Filter>
     </QtMoc>
   </ItemGroup>

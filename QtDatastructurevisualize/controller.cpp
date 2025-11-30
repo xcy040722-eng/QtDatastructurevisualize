@@ -1,7 +1,8 @@
 ﻿#include "controller.h"
 #include "basescene.h"
 #include "linearlistscene.h"
-#include "treescene.h" // === 包含树场景 ===
+#include "treescene.h" 
+#include "huffmanscene.h" // === 包含哈夫曼场景 ===
 #include "controlpanel.h"
 #include <QDebug>
 #include <QMessageBox>
@@ -10,12 +11,10 @@
 Controller::Controller(BaseScene* scene, ControlPanel* panel, QObject* parent)
     : QObject(parent), m_panel(panel)
 {
-    // 初始场景是 LinearListScene
     m_linearScene = scene;
     m_scene = m_linearScene;
-
-    // 预创建 TreeScene
     m_treeScene = new TreeScene(this);
+    m_huffmanScene = new HuffmanScene(this); // === 初始化 ===
 
     connect(m_panel, &ControlPanel::insertRequested, this, &Controller::onInsertRequested);
     connect(m_panel, &ControlPanel::removeRequested, this, &Controller::onRemoveRequested);
@@ -23,9 +22,9 @@ Controller::Controller(BaseScene* scene, ControlPanel* panel, QObject* parent)
     connect(m_panel, &ControlPanel::resetRequested, this, &Controller::onResetRequested);
     connect(m_panel, &ControlPanel::structureChanged, this, &Controller::onStructureChanged);
 
-    // 连接信号
     connect(m_scene, &BaseScene::animationFinished, this, &Controller::onAnimationFinished);
     connect(m_treeScene, &BaseScene::animationFinished, this, &Controller::onAnimationFinished);
+    connect(m_huffmanScene, &BaseScene::animationFinished, this, &Controller::onAnimationFinished);
 }
 
 void Controller::lockUI() {
@@ -46,13 +45,9 @@ void Controller::showError(const QString& msg) {
     QMessageBox::warning(m_panel, QStringLiteral("提示"), msg);
 }
 
-// 核心：切换视图显示的场景
 void Controller::switchScene(BaseScene* newScene) {
     if (m_scene == newScene) return;
-
     m_scene = newScene;
-
-    // 查找 MainWindow 中的 QGraphicsView
     QGraphicsView* view = parent()->findChild<QGraphicsView*>();
     if (view) {
         view->setScene(m_scene);
@@ -61,7 +56,7 @@ void Controller::switchScene(BaseScene* newScene) {
 }
 
 void Controller::onStructureChanged(int idx) {
-    if (idx < 0 || idx > 3) return;
+    if (idx < 0 || idx > 4) return;
     unlockUI();
     m_data.clear();
     m_currentType = static_cast<StructType>(idx);
@@ -69,16 +64,16 @@ void Controller::onStructureChanged(int idx) {
     if (idx == TREE) {
         m_treeScene->reset();
         switchScene(m_treeScene);
-        qDebug() << "Switched to Tree Scene";
+    }
+    else if (idx == HUFFMAN) {
+        m_huffmanScene->reset();
+        switchScene(m_huffmanScene);
     }
     else {
         LinearListScene* ls = dynamic_cast<LinearListScene*>(m_linearScene);
-        if (ls) {
-            ls->setStructureType(static_cast<LinearListScene::StructureType>(idx));
-        }
+        if (ls) ls->setStructureType(static_cast<LinearListScene::StructureType>(idx));
         m_linearScene->reset();
         switchScene(m_linearScene);
-        qDebug() << "Switched to Linear Scene: " << idx;
     }
 }
 
@@ -105,7 +100,8 @@ void Controller::onInsertRequested(const QString& valueStr) {
         return;
     }
 
-    if (m_currentType != STACK && findIndex(val) != -1) {
+    // 哈夫曼允许重复权重，所以只在其他模式查重
+    if (m_currentType != STACK && m_currentType != HUFFMAN && findIndex(val) != -1) {
         showError(QStringLiteral("该数值已存在！"));
         return;
     }
@@ -118,6 +114,14 @@ void Controller::onInsertRequested(const QString& valueStr) {
 
 void Controller::onRemoveRequested(const QString& valueStr) {
     if (m_isAnimating) return;
+
+    // === 哈夫曼特判：执行合并 ===
+    if (m_currentType == HUFFMAN) {
+        // 不需要输入值
+        lockUI();
+        m_scene->removeNodeAnimated(0, 0); // 这里的参数无意义，仅作为触发信号
+        return;
+    }
 
     if (m_currentType == STACK) {
         if (m_data.empty()) {
@@ -152,7 +156,7 @@ void Controller::onRemoveRequested(const QString& valueStr) {
 
 void Controller::onFindRequested(const QString& valueStr) {
     if (m_isAnimating) return;
-    if (m_currentType == STACK) return;
+    if (m_currentType == STACK || m_currentType == HUFFMAN) return;
 
     bool ok;
     int val = valueStr.toInt(&ok);
@@ -162,9 +166,7 @@ void Controller::onFindRequested(const QString& valueStr) {
     }
 
     int index = findIndex(val);
-    // Tree 模式下即使 index 为 -1 (未在 m_data 中找到) 也允许调用，因为 TreeScene 内部可能有更复杂的逻辑
-    // 但为了安全，这里还是校验了 index。
-    if (index != -1) {
+    if (index != -1 || m_currentType == TREE) {
         lockUI();
         m_scene->searchNodeAnimated(val, index);
     }

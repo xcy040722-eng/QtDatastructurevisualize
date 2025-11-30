@@ -37,7 +37,7 @@
   </ImportGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="QtSettings">
     <QtInstall>6.9.2_msvc2022_64</QtInstall>
-    <QtModules>core;gui;widgets</QtModules>
+    <QtModules>core;gui;network;widgets</QtModules>
     <QtBuildConfig>debug</QtBuildConfig>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'" Label="QtSettings">
@@ -95,6 +95,7 @@
     <ClCompile Include="arraylistmodel.cpp" />
     <ClCompile Include="basescene.cpp" />
     <ClCompile Include="controller.cpp" />
+    <ClCompile Include="deepseekbridge.cpp" />
     <ClCompile Include="huffmanscene.cpp" />
     <ClCompile Include="linearlistscene.cpp" />
     <ClCompile Include="models\linkedlistmodel.cpp" />
@@ -131,6 +132,9 @@
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="huffmanscene.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <QtMoc Include="deepseekbridge.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">

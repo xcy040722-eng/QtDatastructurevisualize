@@ -18,7 +18,7 @@ ControlPanel::ControlPanel(QWidget* parent) : QWidget(parent) {
 
 void ControlPanel::setupUi() {
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
-    mainLayout->setSpacing(10);
+    mainLayout->setSpacing(12);
 
     mainLayout->addWidget(new QLabel(QStringLiteral("<b>选择数据结构:</b>")));
     m_structCombo = new QComboBox();
@@ -26,7 +26,10 @@ void ControlPanel::setupUi() {
     m_structCombo->addItem(QStringLiteral("顺序表 (Array List)"));
     m_structCombo->addItem(QStringLiteral("栈 (Stack)"));
     m_structCombo->addItem(QStringLiteral("二叉搜索树 (BST)"));
+    // === 新增：AVL ===
+    m_structCombo->addItem(QStringLiteral("平衡二叉树 (AVL)"));
     m_structCombo->addItem(QStringLiteral("哈夫曼树 (Huffman)"));
+
     mainLayout->addWidget(m_structCombo);
 
     mainLayout->addWidget(new QLabel(QStringLiteral("<b>节点数值/权重:</b>")));
@@ -71,15 +74,12 @@ void ControlPanel::setupUi() {
     line->setFrameShadow(QFrame::Sunken);
     mainLayout->addWidget(line);
 
-    // === 智能交互区域 ===
     QHBoxLayout* dslHeader = new QHBoxLayout();
     dslHeader->addWidget(new QLabel(QStringLiteral("<b>智能交互 / DSL:</b>")));
-
     m_helpBtn = new QPushButton("?");
     m_helpBtn->setFixedSize(24, 24);
-    m_helpBtn->setToolTip("查看 DSL 指令帮助");
+    m_helpBtn->setToolTip("DSL Help");
     m_helpBtn->setStyleSheet("QPushButton { border-radius: 12px; background-color: #ddd; font-weight: bold; }");
-
     dslHeader->addStretch();
     dslHeader->addWidget(m_helpBtn);
     mainLayout->addLayout(dslHeader);
@@ -89,16 +89,12 @@ void ControlPanel::setupUi() {
     m_cmdLine->setPlaceholderText("输入指令 或 自然语言(点AI)");
     m_cmdLine->setStyleSheet("QLineEdit { background-color: #333; color: #0f0; font-family: Consolas; border: 1px solid #555; padding: 4px; }");
 
-    // === 新增：AI 按钮 ===
     m_aiBtn = new QPushButton("AI ✨");
     m_aiBtn->setFixedWidth(50);
-    m_aiBtn->setToolTip("发送给 DeepSeek 进行智能解析");
-    // 搞点骚气的紫色背景
     m_aiBtn->setStyleSheet("QPushButton { background-color: #6a0dad; color: white; font-weight: bold; border: none; border-radius: 4px; } QPushButton:hover { background-color: #8a2be2; }");
 
     cmdLayout->addWidget(m_cmdLine);
     cmdLayout->addWidget(m_aiBtn);
-
     mainLayout->addLayout(cmdLayout);
 
     mainLayout->addStretch();
@@ -134,8 +130,6 @@ void ControlPanel::setupConnections() {
         });
 
     connect(m_helpBtn, &QPushButton::clicked, this, &ControlPanel::showDslHelp);
-
-    // === AI 按钮连接 ===
     connect(m_aiBtn, &QPushButton::clicked, this, [this]() {
         if (!m_cmdLine->text().trimmed().isEmpty()) {
             emit askAiRequested();
@@ -151,26 +145,10 @@ void ControlPanel::setupConnections() {
 }
 
 void ControlPanel::showDslHelp() {
-    QString helpText =
-        "<h3>DSL 指令速查</h3>"
-        "<b>1. 快速构建</b><br>"
-        "new bst [10, 20, 30]<br>"
-        "new stack [1, 2]<br>"
-        "<b>2. 操作</b><br>"
-        "insert 50, delete 20, find 30<br>"
-        "push 100, pop<br>"
-        "<b>3. 遍历</b><br>"
-        "traverse pre/in/post<br>"
-        "<hr>"
-        "<b>✨ AI 模式</b><br>"
-        "在输入框输入自然语言，例如：<br>"
-        "<i>'帮我建一个包含 1 到 5 的二叉树'</i><br>"
-        "然后点击紫色 <b>AI</b> 按钮即可。";
-
+    QString helpText = "DSL 指令帮助:\nnew avl [1,2,3]\nnew bst [1,2,3]\ninsert 100\ndelete 20\ntraverse in\n...";
     QMessageBox::information(this, QStringLiteral("指令帮助"), helpText);
 }
 
-// Getters / Setters
 QString ControlPanel::getCommandText() const { return m_cmdLine->text().trimmed(); }
 void ControlPanel::clearCommandText() { m_cmdLine->clear(); }
 void ControlPanel::setCommandText(const QString& text) { m_cmdLine->setText(text); }
@@ -180,7 +158,7 @@ void ControlPanel::updateButtonTexts(int index) {
         m_insertBtn->setText(QStringLiteral("入栈 (Push)"));
         m_removeBtn->setText(QStringLiteral("出栈 (Pop)"));
     }
-    else if (index == 4) {
+    else if (index == 5) { // Huffman is now 5
         m_insertBtn->setText(QStringLiteral("添加叶子"));
         m_removeBtn->setText(QStringLiteral("执行合并"));
     }
@@ -191,12 +169,12 @@ void ControlPanel::updateButtonTexts(int index) {
 }
 
 void ControlPanel::updateUIState(int index) {
-    bool isTree = (index == 3);
+    bool isTree = (index == 3 || index == 4); // BST or AVL
     m_traverseLabel->setVisible(isTree);
     m_traverseCombo->setVisible(isTree);
     m_traverseBtn->setVisible(isTree);
 
-    bool canSearch = (index != 2 && index != 4);
+    bool canSearch = (index != 2 && index != 5);
     m_findBtn->setEnabled(canSearch);
     m_findBtn->setText(canSearch ? QStringLiteral("查找") : QStringLiteral("查找 (不支持)"));
 }
@@ -214,7 +192,7 @@ void ControlPanel::setButtonsEnabled(bool enable) {
     m_aiBtn->setEnabled(enable);
 
     int currentIdx = m_structCombo->currentIndex();
-    if (currentIdx == 2 || currentIdx == 4) {
+    if (currentIdx == 2 || currentIdx == 5) {
         m_findBtn->setEnabled(false);
     }
     else {

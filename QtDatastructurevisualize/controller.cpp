@@ -4,7 +4,7 @@
 #include "treescene.h" 
 #include "huffmanscene.h" 
 #include "controlpanel.h"
-#include "deepseekbridge.h" // === 包含 AI 头文件 ===
+#include "deepseekbridge.h"
 #include <QDebug>
 #include <QMessageBox>
 #include <QGraphicsView>
@@ -25,7 +25,6 @@ Controller::Controller(BaseScene* scene, ControlPanel* panel, QObject* parent)
     m_treeScene = new TreeScene(this);
     m_huffmanScene = new HuffmanScene(this);
 
-    // === 初始化 AI ===
     m_ai = new DeepSeekBridge(this);
     connect(m_ai, &DeepSeekBridge::responseReceived, this, &Controller::onAiResponse);
     connect(m_ai, &DeepSeekBridge::errorOccurred, this, &Controller::onAiError);
@@ -41,7 +40,6 @@ Controller::Controller(BaseScene* scene, ControlPanel* panel, QObject* parent)
     connect(m_panel, &ControlPanel::loadRequested, this, &Controller::onLoadRequested);
     connect(m_panel, &ControlPanel::commandEntered, this, &Controller::onCommandEntered);
 
-    // === 连接 AI 按钮 ===
     connect(m_panel, &ControlPanel::askAiRequested, this, &Controller::onAskAiRequested);
 
     connect(m_scene, &BaseScene::animationFinished, this, &Controller::onAnimationFinished);
@@ -87,13 +85,19 @@ void Controller::switchScene(BaseScene* newScene) {
 }
 
 void Controller::onStructureChanged(int idx) {
-    if (idx < 0 || idx > 4) return;
+    if (idx < 0 || idx > 5) return;
     unlockUI();
     m_data.clear();
     m_endAnimationMsg.clear();
     m_currentType = static_cast<StructType>(idx);
 
     if (idx == TREE) {
+        m_treeScene->setAVLMode(false);
+        m_treeScene->reset();
+        switchScene(m_treeScene);
+    }
+    else if (idx == AVL) {
+        m_treeScene->setAVLMode(true);
         m_treeScene->reset();
         switchScene(m_treeScene);
     }
@@ -251,36 +255,26 @@ void Controller::onAiError(const QString& errorMsg) {
 // === 核心：DSL 指令执行 ===
 void Controller::onCommandEntered(const QString& rawCmd) {
     if (m_isAnimating) return;
-
     QString cmd = rawCmd.trimmed().toLower();
     QStringList parts = cmd.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts);
     if (parts.isEmpty()) return;
-
     QString action = parts[0];
 
-    // 1. 快速构建: new bst [1,2,3]
     if (action == "new" || action == "build") {
-        if (parts.size() < 3) { showError("语法错误: new <type> [data]"); return; }
+        if (parts.size() < 3) { showError("语法错误"); return; }
         QString typeStr = parts[1];
         int typeIdx = -1;
-
         if (typeStr == "list") typeIdx = LINKED;
         else if (typeStr == "array") typeIdx = ARRAY;
         else if (typeStr == "stack") typeIdx = STACK;
         else if (typeStr == "bst" || typeStr == "tree") typeIdx = TREE;
+        else if (typeStr == "avl") typeIdx = AVL; // AVL DSL
         else if (typeStr == "huffman") typeIdx = HUFFMAN;
 
-        if (typeIdx == -1) { showError("未知类型: " + typeStr); return; }
-
-        // 切换类型
+        if (typeIdx == -1) { showError("未知类型"); return; }
         QComboBox* combo = m_panel->findChild<QComboBox*>();
-        if (combo) {
-            if (combo->currentIndex() != typeIdx) combo->setCurrentIndex(typeIdx);
-            else onResetRequested();
-        }
-
-        // 解析数据并批量插入
-        std::vector<int> data = parseArrayString(rawCmd); // 传原始 cmd 以保留括号
+        if (combo) { if (combo->currentIndex() != typeIdx) combo->setCurrentIndex(typeIdx); else onResetRequested(); }
+        std::vector<int> data = parseArrayString(rawCmd);
         if (!data.empty()) batchInsert(data);
         return;
     }

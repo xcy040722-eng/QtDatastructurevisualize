@@ -4,7 +4,10 @@
 
 class BaseScene;
 class ControlPanel;
-class DeepSeekBridge; // === 新增前置声明 ===
+class DeepSeekBridge;
+// === 新增：前置声明具体场景类 ===
+class TreeScene;
+class HuffmanScene;
 
 class Controller : public QObject {
     Q_OBJECT
@@ -23,7 +26,6 @@ public slots:
     void onLoadRequested();
     void onCommandEntered(const QString& cmd);
 
-    // === 新增：AI 交互槽 ===
     void onAskAiRequested();
     void onAiResponse(const QString& dslCmd);
     void onAiError(const QString& errorMsg);
@@ -31,16 +33,15 @@ public slots:
 private:
     BaseScene* m_scene = nullptr;
     ControlPanel* m_panel = nullptr;
-
-    // === 新增：AI 桥接器 ===
     DeepSeekBridge* m_ai = nullptr;
 
     BaseScene* m_linearScene = nullptr;
-    BaseScene* m_treeScene = nullptr;
-    BaseScene* m_huffmanScene = nullptr;
+    // === 关键修改：使用具体类型指针，而不是基类指针 ===
+    TreeScene* m_treeScene = nullptr;
+    HuffmanScene* m_huffmanScene = nullptr;
 
     std::vector<int> m_data;
-    enum StructType { LINKED = 0, ARRAY = 1, STACK = 2, TREE = 3, HUFFMAN = 4 } m_currentType = LINKED;
+    enum StructType { LINKED = 0, ARRAY = 1, STACK = 2, TREE = 3, AVL = 4, HUFFMAN = 5 } m_currentType = LINKED;
     bool m_isAnimating = false;
     QString m_endAnimationMsg;
 

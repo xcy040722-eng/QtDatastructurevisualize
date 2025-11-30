@@ -8,8 +8,11 @@
 #include <QString>
 #include <QSequentialAnimationGroup> 
 
+// 树节点结构体
 struct TreeNode {
     int value;
+    int height = 1; // === 新增：AVL 高度 ===
+
     TreeNode* left = nullptr;
     TreeNode* right = nullptr;
 
@@ -34,8 +37,10 @@ public:
     void insertNodeAnimated(int value, int index) override;
     void removeNodeAnimated(int value, int index) override;
     void searchNodeAnimated(int value, int index) override;
-
     void traverseAnimated(int type) override;
+
+    // === 新增：设置 AVL 模式 ===
+    void setAVLMode(bool enable);
 
 private:
     TreeNode* root = nullptr;
@@ -43,6 +48,7 @@ private:
     QGraphicsSimpleTextItem* m_resultText = nullptr;
 
     QList<QGraphicsItem*> m_trashItems;
+    bool m_isAVL = false; // === 新增：AVL 标志位 ===
 
     const int NODE_RADIUS = 25;
     const int LEVEL_HEIGHT = 80;
@@ -60,10 +66,16 @@ private:
     void markForDeletion(TreeNode* node);
     void processTrashBin();
 
-    // === 遍历辅助 ===
     void buildTraversalAnim(QSequentialAnimationGroup* group, TreeNode* node, int type, QString& resultString);
     void addVisitAnim(QSequentialAnimationGroup* group, TreeNode* node, QString& currentStr);
-
-    // === 新增：获取遍历序列的第一个节点 ===
     TreeNode* getFirstNode(TreeNode* node, int type);
+
+    // === 新增：AVL 核心算法 ===
+    int getHeight(TreeNode* node);
+    int getBalance(TreeNode* node);
+    void updateHeight(TreeNode* node);
+
+    TreeNode* rightRotate(TreeNode* y);
+    TreeNode* leftRotate(TreeNode* x);
+    TreeNode* insertAVLRecursive(TreeNode* node, TreeNode* newNode); // 递归插入并平衡
 };

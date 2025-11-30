@@ -41,89 +41,42 @@ void TreeScene::cleanTreeRecursive(TreeNode* node) {
     delete node;
 }
 
-// === AVL 辅助函数 ===
-int TreeScene::getHeight(TreeNode* node) {
-    return node ? node->height : 0;
-}
+// === AVL 辅助 ===
+int TreeScene::getHeight(TreeNode* node) { return node ? node->height : 0; }
+int TreeScene::getBalance(TreeNode* node) { return node ? getHeight(node->left) - getHeight(node->right) : 0; }
+void TreeScene::updateHeight(TreeNode* node) { if (node) node->height = 1 + std::max(getHeight(node->left), getHeight(node->right)); }
 
-int TreeScene::getBalance(TreeNode* node) {
-    return node ? getHeight(node->left) - getHeight(node->right) : 0;
-}
-
-void TreeScene::updateHeight(TreeNode* node) {
-    if (node) {
-        node->height = 1 + std::max(getHeight(node->left), getHeight(node->right));
-    }
-}
-
-// === AVL 旋转操作 ===
 TreeNode* TreeScene::rightRotate(TreeNode* y) {
-    TreeNode* x = y->left;
-    TreeNode* T2 = x->right;
-
-    x->right = y;
-    y->left = T2;
-
-    updateHeight(y);
-    updateHeight(x);
-
+    TreeNode* x = y->left; TreeNode* T2 = x->right;
+    x->right = y; y->left = T2;
+    updateHeight(y); updateHeight(x);
     return x;
 }
-
 TreeNode* TreeScene::leftRotate(TreeNode* x) {
-    TreeNode* y = x->right;
-    TreeNode* T2 = y->left;
-
-    y->left = x;
-    x->right = T2;
-
-    updateHeight(x);
-    updateHeight(y);
-
+    TreeNode* y = x->right; TreeNode* T2 = y->left;
+    y->left = x; x->right = T2;
+    updateHeight(x); updateHeight(y);
     return y;
 }
 
 TreeNode* TreeScene::insertAVLRecursive(TreeNode* node, TreeNode* newNode) {
     if (!node) return newNode;
-
-    if (newNode->value < node->value)
-        node->left = insertAVLRecursive(node->left, newNode);
-    else if (newNode->value > node->value)
-        node->right = insertAVLRecursive(node->right, newNode);
-    else
-        return node;
+    if (newNode->value < node->value) node->left = insertAVLRecursive(node->left, newNode);
+    else if (newNode->value > node->value) node->right = insertAVLRecursive(node->right, newNode);
+    else return node;
 
     if (!m_isAVL) return node;
-
     updateHeight(node);
     int balance = getBalance(node);
-
-    // LL Case
-    if (balance > 1 && newNode->value < node->left->value)
-        return rightRotate(node);
-
-    // RR Case
-    if (balance < -1 && newNode->value > node->right->value)
-        return leftRotate(node);
-
-    // LR Case
-    if (balance > 1 && newNode->value > node->left->value) {
-        node->left = leftRotate(node->left);
-        return rightRotate(node);
-    }
-
-    // RL Case
-    if (balance < -1 && newNode->value < node->right->value) {
-        node->right = rightRotate(node->right);
-        return leftRotate(node);
-    }
-
+    if (balance > 1 && newNode->value < node->left->value) return rightRotate(node);
+    if (balance < -1 && newNode->value > node->right->value) return leftRotate(node);
+    if (balance > 1 && newNode->value > node->left->value) { node->left = leftRotate(node->left); return rightRotate(node); }
+    if (balance < -1 && newNode->value < node->right->value) { node->right = rightRotate(node->right); return leftRotate(node); }
     return node;
 }
 
 void TreeScene::insertNodeAnimated(int value, int index) {
     (void)index;
-
     if (!root) {
         root = new TreeNode(value);
         createVisualNode(root, ROOT_X, ROOT_Y);
@@ -148,20 +101,10 @@ void TreeScene::insertNodeAnimated(int value, int index) {
         if (parent && parent->circle) newNode->circle->setPos(parent->circle->pos());
         newNode->circle->setOpacity(0);
 
-        if (m_isAVL) {
-            root = insertAVLRecursive(root, newNode);
-        }
+        if (m_isAVL) root = insertAVLRecursive(root, newNode);
         else {
-            // === 这里的 parent 现在是正确的了，不会是 nullptr ===
-            if (!parent) {
-                // 兜底保护
-                if (newNode->circle) { removeItem(newNode->circle); delete newNode->circle; }
-                delete newNode;
-                emit animationFinished();
-                return;
-            }
-            if (isLeft) parent->left = newNode;
-            else parent->right = newNode;
+            if (!parent) { if (newNode->circle) { removeItem(newNode->circle); delete newNode->circle; } delete newNode; emit animationFinished(); return; }
+            if (isLeft) parent->left = newNode; else parent->right = newNode;
         }
 
         calculateLayout(root, ROOT_X, ROOT_Y, 200);
@@ -179,8 +122,7 @@ void TreeScene::insertNodeAnimated(int value, int index) {
 
 void TreeScene::calculateLayout(TreeNode* node, int x, int y, int hOffset) {
     if (!node) return;
-    node->targetX = x;
-    node->targetY = y;
+    node->targetX = x; node->targetY = y;
     int nextOffset = qMax(35, hOffset / 2);
     calculateLayout(node->left, x - hOffset, y + LEVEL_HEIGHT, nextOffset);
     calculateLayout(node->right, x + hOffset, y + LEVEL_HEIGHT, nextOffset);
@@ -194,8 +136,6 @@ void TreeScene::refreshTreeVisuals(TreeNode* node, QPointF parentPos) {
         QVariantAnimation* anim = new QVariantAnimation(this);
         anim->setDuration(600); anim->setStartValue(node->circle->pos()); anim->setEndValue(endPos);
         anim->setEasingCurve(QEasingCurve::OutCubic);
-
-        // 捕获 this
         connect(anim, &QVariantAnimation::valueChanged, this, [this, node](const QVariant& val) {
             if (node && node->circle) node->circle->setPos(val.toPointF());
             });
@@ -212,15 +152,10 @@ void TreeScene::refreshTreeVisuals(TreeNode* node, QPointF parentPos) {
     if (parentPos != QPointF(-1, -1)) {
         QPointF myCenter = endPos + QPointF(NODE_RADIUS, NODE_RADIUS);
         QLineF correctLine(parentPos, myCenter);
-        if (!node->linkToParent) {
-            node->linkToParent = addLine(correctLine, QPen(Qt::black, 2));
-            node->linkToParent->setZValue(0);
-        }
+        if (!node->linkToParent) { node->linkToParent = addLine(correctLine, QPen(Qt::black, 2)); node->linkToParent->setZValue(0); }
         else { node->linkToParent->setLine(correctLine); }
     }
-    else {
-        if (node->linkToParent) { removeItem(node->linkToParent); delete node->linkToParent; node->linkToParent = nullptr; }
-    }
+    else { if (node->linkToParent) { removeItem(node->linkToParent); delete node->linkToParent; node->linkToParent = nullptr; } }
     QPointF myTargetCenter(node->targetX, node->targetY);
     refreshTreeVisuals(node->left, myTargetCenter);
     refreshTreeVisuals(node->right, myTargetCenter);
@@ -233,27 +168,16 @@ void TreeScene::animSearchPath(int targetVal, std::function<void(TreeNode*, Tree
     }
     QList<QPointF> pathPoints;
     TreeNode* curr = root;
-
-    // 记录查找过程中的变量
-    TreeNode* parent = nullptr;
-    bool isLeft = false;
+    TreeNode* parent = nullptr; bool isLeft = false;
 
     if (root) pathPoints.append(root->circle->pos() - QPointF(5, 5));
     else pathPoints.append(QPointF(ROOT_X - NODE_RADIUS - 5, ROOT_Y - NODE_RADIUS - 5));
 
     while (curr != nullptr) {
         if (curr->value == targetVal) break;
-
-        parent = curr; // 记录父节点
-        if (targetVal < curr->value) {
-            curr = curr->left;
-            isLeft = true;
-        }
-        else {
-            curr = curr->right;
-            isLeft = false;
-        }
-
+        parent = curr;
+        if (targetVal < curr->value) { curr = curr->left; isLeft = true; }
+        else { curr = curr->right; isLeft = false; }
         if (curr) pathPoints.append(curr->circle->pos() - QPointF(5, 5));
     }
 
@@ -262,12 +186,8 @@ void TreeScene::animSearchPath(int targetVal, std::function<void(TreeNode*, Tree
 
     QSequentialAnimationGroup* group = new QSequentialAnimationGroup(this);
     if (pathPoints.size() <= 1 && !root) {
-        // 即使没动画，也要正确回调
-        QTimer::singleShot(100, [onFinished, parent, curr, isLeft]() {
-            onFinished(parent, curr, isLeft);
-            });
-        group->deleteLater();
-        return;
+        QTimer::singleShot(100, [onFinished, parent, curr, isLeft]() { onFinished(parent, curr, isLeft); });
+        group->deleteLater(); return;
     }
     for (int i = 0; i < pathPoints.size() - 1; ++i) {
         QVariantAnimation* move = new QVariantAnimation(group);
@@ -278,8 +198,6 @@ void TreeScene::animSearchPath(int targetVal, std::function<void(TreeNode*, Tree
             });
         group->addAnimation(move); group->addPause(100);
     }
-
-    // === 关键修复：正确传递 parent, curr, isLeft ===
     connect(group, &QAbstractAnimation::finished, this, [this, onFinished, parent, curr, isLeft, group]() {
         onFinished(parent, curr, isLeft);
         group->deleteLater();
@@ -296,32 +214,85 @@ void TreeScene::createVisualNode(TreeNode* node, int x, int y) {
     node->text->setPos((NODE_RADIUS * 2 - b.width()) / 2, (NODE_RADIUS * 2 - b.height()) / 2);
 }
 
+// === 修复核心：改用 QColor 插值 ===
+void TreeScene::highlightNodeVisual(TreeNode* node, QColor color, std::function<void()> onFinished) {
+    if (!node || !node->circle) {
+        if (onFinished) onFinished();
+        return;
+    }
+
+    // 【关键】提取颜色
+    QColor originalColor = node->circle->brush().color();
+    QColor targetColor = color;
+
+    QVariantAnimation* anim = new QVariantAnimation(this);
+    anim->setDuration(600);
+    // QVariantAnimation 对 QColor 插值支持很好
+    anim->setKeyValueAt(0.0, originalColor);
+    anim->setKeyValueAt(1.0, targetColor);
+
+    // 【关键】在回调里重组 Brush
+    connect(anim, &QVariantAnimation::valueChanged, this, [node](const QVariant& val) {
+        if (node && node->circle) node->circle->setBrush(QBrush(val.value<QColor>()));
+        });
+
+    connect(anim, &QVariantAnimation::finished, this, [this, onFinished]() {
+        if (m_probeHalo) m_probeHalo->setVisible(false);
+        if (onFinished) onFinished();
+        });
+
+    anim->start();
+}
+
+// === BST 删除：探针 -> 红 -> 消失 ===
 void TreeScene::removeNodeAnimated(int value, int index) {
     (void)index;
-    animSearchPath(value, [this, value](TreeNode*, TreeNode*, bool) {
-        if (m_probeHalo) m_probeHalo->setVisible(false);
-        bool deleted = false;
-        root = deleteNodeRecursive(root, value, deleted);
-        if (deleted) {
-            calculateLayout(root, ROOT_X, ROOT_Y, 200);
-            processTrashBin();
-            refreshTreeVisuals(root, QPointF(-1, -1));
-            QTimer::singleShot(650, this, &BaseScene::animationFinished);
+
+    // 1. 探针寻路
+    animSearchPath(value, [this, value](TreeNode* parent, TreeNode* current, bool) {
+
+        TreeNode* target = nullptr;
+        TreeNode* p = root;
+        while (p) {
+            if (p->value == value) { target = p; break; }
+            if (value < p->value) p = p->left; else p = p->right;
         }
-        else { emit animationFinished(); }
+
+        if (!target) {
+            if (m_probeHalo) m_probeHalo->setVisible(false);
+            emit animationFinished();
+            return;
+        }
+
+        // 2. 红色高亮 (使用修复后的 highlightNodeVisual)
+        highlightNodeVisual(target, Qt::red, [this, value]() {
+
+            // 3. 执行删除逻辑
+            bool deleted = false;
+            root = deleteNodeRecursive(root, value, deleted);
+
+            if (deleted) {
+                calculateLayout(root, ROOT_X, ROOT_Y, 200);
+                processTrashBin(); // 4. 淡出
+                refreshTreeVisuals(root, QPointF(-1, -1));
+
+                QTimer::singleShot(650, this, &BaseScene::animationFinished);
+            }
+            else {
+                emit animationFinished();
+            }
+            });
         });
 }
 
 void TreeScene::searchNodeAnimated(int value, int index) {
     (void)index;
     animSearchPath(value, [this, value](TreeNode*, TreeNode*, bool) {
-        // 手动查找节点以高亮 (回调参数 curr 可能是 nullptr 如果 animSearchPath 逻辑有变，这里双重保险)
         TreeNode* curr = root;
         while (curr) {
             if (curr->value == value) break;
             if (value < curr->value) curr = curr->left; else curr = curr->right;
         }
-
         if (m_probeHalo) m_probeHalo->setVisible(false);
         if (curr && curr->circle) {
             QBrush original = curr->circle->brush();

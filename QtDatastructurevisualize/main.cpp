@@ -16,7 +16,7 @@ int main(int argc, char* argv[]) {
     app.setFont(font);
 
     MainWindow w;
-    w.setWindowTitle(QStringLiteral("数据结构可视化模拟器 - Phase 2 (完美线性版)"));
+    w.setWindowTitle(QStringLiteral("数据结构可视化模拟器"));
     w.resize(1024, 768);
     w.show();
 

@@ -25,37 +25,36 @@ public:
     void setStructureType(StructureType type);
     void reset() override;
 
-    // 重写基类方法，实现具体动画
     void insertNodeAnimated(int value, int index) override;
     void removeNodeAnimated(int value, int index) override;
-    // 关键修复：声明查找动画
     void searchNodeAnimated(int value, int index) override;
 
 private:
     StructureType m_type = LINKED_LIST;
-    QList<int> m_dataList; // 数据副本，用于计算位置
-    QMap<int, NodeGraphics*> m_visualNodes; // 图形映射
+    QList<int> m_dataList;
+    QMap<int, NodeGraphics*> m_visualNodes;
 
-    // 辅助图形：红色探针
     QGraphicsRectItem* m_probeRect = nullptr;
 
-    // 布局常量 (调整得更紧凑，方便查看)
-    const int START_X = 40;     // 原 60 -> 40
-    const int START_Y_LIST = 80; // 原 150 -> 80
+    const int START_X = 40;
+    const int START_Y_LIST = 80;
     const int START_Y_STACK = 500;
     const int NODE_W = 60;
     const int NODE_H = 40;
     const int GAP = 50;
 
-    // 内部助手函数
     void cleanAllGraphics();
     QPointF getNodePos(int index);
     void updateArrows();
     void createProbe();
 
-    // 动画步骤
+    // 探针移动动画
     void animStepSearch(int targetIndex, std::function<void()> onFinished);
 
-    // 新增：高亮节点动画
+    // === 统一高亮接口 ===
+    // 重载1：简便调用，默认绿色，自动恢复（查找用）
     void highlightNode(int value, std::function<void()> onFinished);
+
+    // 重载2：完整调用，支持自定义颜色和是否恢复（删除用）
+    void highlightNode(int value, QColor color, bool autoRestore, std::function<void()> onFinished);
 };

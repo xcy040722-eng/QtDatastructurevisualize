@@ -11,18 +11,14 @@
 // 树节点结构体
 struct TreeNode {
     int value;
-    int height = 1; // === 新增：AVL 高度 ===
-
+    int height = 1;
     TreeNode* left = nullptr;
     TreeNode* right = nullptr;
-
     QGraphicsEllipseItem* circle = nullptr;
     QGraphicsSimpleTextItem* text = nullptr;
     QGraphicsLineItem* linkToParent = nullptr;
-
     int targetX = 0;
     int targetY = 0;
-
     explicit TreeNode(int v) : value(v) {}
 };
 
@@ -33,22 +29,18 @@ public:
     ~TreeScene() override;
 
     void reset() override;
-
     void insertNodeAnimated(int value, int index) override;
     void removeNodeAnimated(int value, int index) override;
     void searchNodeAnimated(int value, int index) override;
     void traverseAnimated(int type) override;
-
-    // === 新增：设置 AVL 模式 ===
     void setAVLMode(bool enable);
 
 private:
     TreeNode* root = nullptr;
     QGraphicsEllipseItem* m_probeHalo = nullptr;
     QGraphicsSimpleTextItem* m_resultText = nullptr;
-
     QList<QGraphicsItem*> m_trashItems;
-    bool m_isAVL = false; // === 新增：AVL 标志位 ===
+    bool m_isAVL = false;
 
     const int NODE_RADIUS = 25;
     const int LEVEL_HEIGHT = 80;
@@ -70,12 +62,13 @@ private:
     void addVisitAnim(QSequentialAnimationGroup* group, TreeNode* node, QString& currentStr);
     TreeNode* getFirstNode(TreeNode* node, int type);
 
-    // === 新增：AVL 核心算法 ===
+    // === 新增：统一的高亮辅助 ===
+    void highlightNodeVisual(TreeNode* node, QColor color, std::function<void()> onFinished);
+
     int getHeight(TreeNode* node);
     int getBalance(TreeNode* node);
     void updateHeight(TreeNode* node);
-
     TreeNode* rightRotate(TreeNode* y);
     TreeNode* leftRotate(TreeNode* x);
-    TreeNode* insertAVLRecursive(TreeNode* node, TreeNode* newNode); // 递归插入并平衡
+    TreeNode* insertAVLRecursive(TreeNode* node, TreeNode* newNode);
 };

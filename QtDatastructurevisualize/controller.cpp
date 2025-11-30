@@ -3,7 +3,7 @@
 #include "linearlistscene.h"
 #include "treescene.h" 
 #include "huffmanscene.h"
-#include "avl_scene.h"  // === 新增 ===
+#include "avl_scene.h" 
 #include "controlpanel.h"
 #include "deepseekbridge.h"
 #include <QDebug>
@@ -21,22 +21,17 @@
 Controller::Controller(BaseScene* scene, ControlPanel* panel, QObject* parent)
     : QObject(parent), m_panel(panel)
 {
-    // 初始化各个场景
     m_linearScene = scene;
     m_scene = m_linearScene;
 
     m_treeScene = new TreeScene(this);
     m_huffmanScene = new HuffmanScene(this);
-
-    // === 新增：初始化 AVL 场景 ===
     m_avlScene = new AVLScene(this);
 
-    // AI 初始化
     m_ai = new DeepSeekBridge(this);
     connect(m_ai, &DeepSeekBridge::responseReceived, this, &Controller::onAiResponse);
     connect(m_ai, &DeepSeekBridge::errorOccurred, this, &Controller::onAiError);
 
-    // 连接面板信号
     connect(m_panel, &ControlPanel::insertRequested, this, &Controller::onInsertRequested);
     connect(m_panel, &ControlPanel::removeRequested, this, &Controller::onRemoveRequested);
     connect(m_panel, &ControlPanel::findRequested, this, &Controller::onFindRequested);
@@ -48,11 +43,9 @@ Controller::Controller(BaseScene* scene, ControlPanel* panel, QObject* parent)
     connect(m_panel, &ControlPanel::commandEntered, this, &Controller::onCommandEntered);
     connect(m_panel, &ControlPanel::askAiRequested, this, &Controller::onAskAiRequested);
 
-    // 连接场景动画结束信号
     connect(m_linearScene, &BaseScene::animationFinished, this, &Controller::onAnimationFinished);
     connect(m_treeScene, &BaseScene::animationFinished, this, &Controller::onAnimationFinished);
     connect(m_huffmanScene, &BaseScene::animationFinished, this, &Controller::onAnimationFinished);
-    // === 新增 ===
     connect(m_avlScene, &BaseScene::animationFinished, this, &Controller::onAnimationFinished);
 }
 
@@ -80,15 +73,11 @@ void Controller::showError(const QString& msg) {
 
 void Controller::switchScene(BaseScene* newScene) {
     if (m_scene == newScene) return;
-
     m_scene = newScene;
-
-    // 切换 View 中的 Scene
     QGraphicsView* view = parent()->findChild<QGraphicsView*>();
     if (view) {
         view->setScene(m_scene);
         view->centerOn(0, 0);
-        // 滚动条复位
         if (view->horizontalScrollBar()) view->horizontalScrollBar()->setValue(0);
         if (view->verticalScrollBar()) view->verticalScrollBar()->setValue(0);
         view->update();
@@ -102,17 +91,14 @@ void Controller::onStructureChanged(int idx) {
     m_endAnimationMsg.clear();
     m_currentType = static_cast<StructType>(idx);
 
-    // === 核心修改：场景路由 ===
     if (idx == TREE) {
-        // 普通 BST 使用旧的 TreeScene
         m_treeScene->setAVLMode(false);
         m_treeScene->reset();
         switchScene(m_treeScene);
     }
     else if (idx == AVL) {
-        // === AVL 使用新架构 ===
-        m_avlLogic.reset(); // 逻辑重置
-        m_avlScene->reset(); // 视图重置
+        m_avlLogic.reset();
+        m_avlScene->reset();
         switchScene(m_avlScene);
     }
     else if (idx == HUFFMAN) {
@@ -120,7 +106,6 @@ void Controller::onStructureChanged(int idx) {
         switchScene(m_huffmanScene);
     }
     else {
-        // 线性结构
         LinearListScene* ls = dynamic_cast<LinearListScene*>(m_linearScene);
         if (ls) ls->setStructureType(static_cast<LinearListScene::StructureType>(idx));
         m_linearScene->reset();
@@ -130,10 +115,7 @@ void Controller::onStructureChanged(int idx) {
 
 void Controller::onResetRequested() {
     m_data.clear();
-    // 针对 AVL 需要重置逻辑层
-    if (m_currentType == AVL) {
-        m_avlLogic.reset();
-    }
+    if (m_currentType == AVL) m_avlLogic.reset();
     m_scene->reset();
     unlockUI();
 }
@@ -143,9 +125,7 @@ void Controller::onInsertRequested(const QString& valueStr) {
     bool ok; int val = valueStr.toInt(&ok);
     if (!ok) { showError("请输入有效的整数！"); return; }
 
-    // 简单查重 (栈和哈夫曼除外)
     if (m_currentType != STACK && m_currentType != HUFFMAN && findIndex(val) != -1) {
-        // 对于 AVL，我们的逻辑层可以处理重复，但为了统一体验，这里拦截
         showError("该数值已存在！"); return;
     }
 
@@ -153,15 +133,11 @@ void Controller::onInsertRequested(const QString& valueStr) {
     int index = m_data.size();
     m_data.push_back(val);
 
-    // === 核心分支：AVL 使用指令队列模式 ===
     if (m_currentType == AVL) {
-        // 1. 逻辑层计算，返回指令包
         QQueue<VisualCommand> cmds = m_avlLogic.insert(val);
-        // 2. 渲染层执行
         m_avlScene->executeCommands(cmds);
     }
     else {
-        // 其他结构维持原有方式
         m_scene->insertNodeAnimated(val, index);
     }
 }
@@ -169,26 +145,17 @@ void Controller::onInsertRequested(const QString& valueStr) {
 void Controller::onRemoveRequested(const QString& valueStr) {
     if (m_isAnimating) return;
 
-    if (m_currentType == HUFFMAN) {
-        lockUI();
-        m_scene->removeNodeAnimated(0, 0);
-        return;
-    }
-
+    if (m_currentType == HUFFMAN) { lockUI(); m_scene->removeNodeAnimated(0, 0); return; }
     if (m_currentType == STACK) {
         if (m_data.empty()) { showError("栈已经空了！"); return; }
         lockUI();
-        int val = m_data.back();
-        int index = m_data.size() - 1;
-        m_data.pop_back();
+        int val = m_data.back(); int index = m_data.size() - 1; m_data.pop_back();
         m_scene->removeNodeAnimated(val, index);
         return;
     }
 
-    // 普通删除
     bool ok; int val = valueStr.toInt(&ok);
     if (!ok) { showError("请输入数值！"); return; }
-
     int index = findIndex(val);
     if (index == -1) { showError("未找到该数值！"); return; }
 
@@ -196,7 +163,6 @@ void Controller::onRemoveRequested(const QString& valueStr) {
     m_data.erase(m_data.begin() + index);
 
     if (m_currentType == AVL) {
-        // 调用 AVL 逻辑层的删除
         QQueue<VisualCommand> cmds = m_avlLogic.remove(val);
         m_avlScene->executeCommands(cmds);
     }
@@ -208,13 +174,10 @@ void Controller::onRemoveRequested(const QString& valueStr) {
 void Controller::onFindRequested(const QString& valueStr) {
     if (m_isAnimating) return;
     if (m_currentType == STACK || m_currentType == HUFFMAN) return;
-
     bool ok; int val = valueStr.toInt(&ok);
     if (!ok) { showError("请输入数值！"); return; }
-
     int index = findIndex(val);
 
-    // AVL 的查找
     if (m_currentType == AVL) {
         lockUI();
         if (index == -1) m_endAnimationMsg = "未找到该数值！";
@@ -223,7 +186,6 @@ void Controller::onFindRequested(const QString& valueStr) {
         return;
     }
 
-    // 其他结构的查找
     if (index != -1) {
         lockUI();
         m_scene->searchNodeAnimated(val, index);
@@ -240,22 +202,22 @@ void Controller::onFindRequested(const QString& valueStr) {
 
 void Controller::onTraverseRequested(int type) {
     if (m_isAnimating) return;
-    // 目前只支持普通树和 AVL (如果 avl_scene 实现了)
     if (m_currentType != TREE && m_currentType != AVL) return;
 
     lockUI();
-    m_scene->traverseAnimated(type);
+
+    if (m_currentType == AVL) {
+        QQueue<VisualCommand> cmds = m_avlLogic.traverse(type);
+        m_avlScene->executeCommands(cmds);
+    }
+    else {
+        m_scene->traverseAnimated(type);
+    }
 }
 
 void Controller::batchInsert(const std::vector<int>& data) {
     if (data.empty()) return;
-
-    struct Context {
-        std::vector<int> vals;
-        int idx = 0;
-        Controller* ctrl;
-    };
-
+    struct Context { std::vector<int> vals; int idx = 0; Controller* ctrl; };
     QTimer* timer = new QTimer(this);
     Context* ctx = new Context{ data, 0, this };
 
@@ -268,7 +230,6 @@ void Controller::batchInsert(const std::vector<int>& data) {
         int index = m_data.size();
         m_data.push_back(val);
 
-        // === 批量插入也需要适配 AVL ===
         if (m_currentType == AVL) {
             auto cmds = m_avlLogic.insert(val);
             m_avlScene->executeCommands(cmds);
@@ -276,10 +237,9 @@ void Controller::batchInsert(const std::vector<int>& data) {
         else {
             m_scene->insertNodeAnimated(val, index);
         }
-
         ctx->idx++;
         });
-    timer->start(1000); // 间隔 1秒，给动画留时间
+    timer->start(1000);
 }
 
 int Controller::findIndex(int value) {
@@ -304,7 +264,6 @@ std::vector<int> Controller::parseArrayString(const QString& str) {
     return res;
 }
 
-// === AI / DSL 部分保持不变 ===
 void Controller::onAskAiRequested() {
     if (m_isAnimating) return;
     QString prompt = m_panel->getCommandText();
@@ -318,7 +277,7 @@ void Controller::onAiResponse(const QString& dslCmd) {
     unlockUI();
     if (dslCmd == "ERROR") {
         m_panel->setCommandText("AI 无法理解该指令");
-        showError("AI 无法理解您的需求，请尝试换种说法。");
+        showError("AI 无法理解您的需求");
     }
     else {
         qDebug() << "AI Generated DSL:" << dslCmd;
@@ -350,7 +309,6 @@ void Controller::onCommandEntered(const QString& rawCmd) {
         else if (typeStr == "bst" || typeStr == "tree") typeIdx = TREE;
         else if (typeStr == "avl") typeIdx = AVL;
         else if (typeStr == "huffman") typeIdx = HUFFMAN;
-
         if (typeIdx == -1) { showError("未知类型"); return; }
         QComboBox* combo = m_panel->findChild<QComboBox*>();
         if (combo) { if (combo->currentIndex() != typeIdx) combo->setCurrentIndex(typeIdx); else onStructureChanged(typeIdx); }
@@ -358,7 +316,6 @@ void Controller::onCommandEntered(const QString& rawCmd) {
         if (!data.empty()) batchInsert(data);
         return;
     }
-    // 复用已有的 onInsert/Remove
     if (action == "insert" || action == "push" || action == "add") {
         if (parts.size() < 2) { showError("请输入数值"); return; }
         onInsertRequested(parts[1]); return;
@@ -389,13 +346,11 @@ void Controller::onSaveRequested() {
     if (m_data.empty()) { showError("无数据可保存"); return; }
     QString fileName = QFileDialog::getSaveFileName(m_panel, "保存", "", "JSON (*.json)");
     if (fileName.isEmpty()) return;
-
     QJsonObject rootObj;
     rootObj["type"] = static_cast<int>(m_currentType);
     QJsonArray arr;
     for (int val : m_data) arr.append(val);
     rootObj["data"] = arr;
-
     QFile file(fileName);
     if (file.open(QIODevice::WriteOnly)) {
         file.write(QJsonDocument(rootObj).toJson());
@@ -407,20 +362,16 @@ void Controller::onLoadRequested() {
     if (m_isAnimating) return;
     QString fileName = QFileDialog::getOpenFileName(m_panel, "打开", "", "JSON (*.json)");
     if (fileName.isEmpty()) return;
-
     QFile file(fileName);
     if (!file.open(QIODevice::ReadOnly)) return;
-
     QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
     QJsonObject rootObj = doc.object();
     int type = rootObj["type"].toInt();
-
     QComboBox* combo = m_panel->findChild<QComboBox*>();
     if (combo) {
         if (combo->currentIndex() != type) combo->setCurrentIndex(type);
-        else onStructureChanged(type); // 确保触发重置
+        else onStructureChanged(type);
     }
-
     std::vector<int> newData;
     for (const auto& val : rootObj["data"].toArray()) newData.push_back(val.toInt());
     batchInsert(newData);

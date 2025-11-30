@@ -7,12 +7,11 @@
 #include <QGraphicsSimpleTextItem>
 #include <QGraphicsLineItem>
 
-// 视觉节点结构：只包含图形元素
 struct VisualNode {
     QGraphicsEllipseItem* circle = nullptr;
     QGraphicsSimpleTextItem* text = nullptr;
-    QGraphicsLineItem* linkToParent = nullptr; // 指向父节点的连线
-    int parentId = -1; // 记录父节点ID，用于移动时更新连线
+    QGraphicsLineItem* linkToParent = nullptr;
+    int parentId = -1;
 };
 
 class AVLScene : public BaseScene {
@@ -22,11 +21,9 @@ public:
     ~AVLScene() override;
 
     void reset() override;
-
-    // === 核心接口：接收并执行指令包 ===
     void executeCommands(const QQueue<VisualCommand>& cmds);
 
-    // 必须实现的基类接口 (转接或空实现)
+    // 适配接口
     void insertNodeAnimated(int value, int index) override {}
     void removeNodeAnimated(int value, int index) override {}
     void searchNodeAnimated(int value, int index) override {}
@@ -34,21 +31,26 @@ public:
 
 private:
     QQueue<VisualCommand> m_cmdQueue;
-    QMap<int, VisualNode> m_nodes; // value -> visual components
+    QMap<int, VisualNode> m_nodes;
     bool m_isAnimating;
+
+    QGraphicsEllipseItem* m_probeHalo = nullptr;
+    QGraphicsSimpleTextItem* m_resultText = nullptr; // === 新增：显示遍历结果 ===
 
     const int RADIUS = 25;
 
-    // 调度器
     void processNextCommand();
 
-    // 具体指令执行函数
     void cmdCreateNode(int id, QPointF pos);
     void cmdMoveNode(int id, QPointF pos, int duration);
     void cmdSetParent(int childId, int parentId);
     void cmdHighlight(int id, QColor color, int duration);
+    void cmdRemoveNode(int id);
+    void cmdSearchHighlight(int id);
+    void cmdUpdateResultText(const QString& text); // === 新增 ===
     void cmdWait(int duration);
 
-    // 辅助：更新与某节点相关的所有连线 (自身连父 + 子连自身)
     void updateRelatedLines(int nodeId);
+    void createProbeHalo();
+    void createResultText(); // 辅助
 };

@@ -1,4 +1,4 @@
-#include "avl_logic.h"
+ï»¿#include "avl_logic.h"
 
 AVLLogic::AVLLogic() : root(nullptr) {}
 
@@ -7,6 +7,7 @@ AVLLogic::~AVLLogic() { reset(); }
 void AVLLogic::reset() {
     freeTree(root);
     root = nullptr;
+    m_traverseStr.clear();
 }
 
 void AVLLogic::freeTree(LogicNode* node) {
@@ -16,14 +17,10 @@ void AVLLogic::freeTree(LogicNode* node) {
     delete node;
 }
 
-// === ºËĞÄ£ºÉú³É²¼¾Ö¿ìÕÕ ===
-// Õâ¸öº¯ÊıÊÇ"¶à½×¶Î¶¯»­"µÄÁé»ê¡£Ã¿µ±Ê÷½á¹¹·¢ÉúÒ»µã±ä»¯£¨ÈçĞı×ªÁËÒ»°ë£©£¬
-// ÎÒÃÇ¾Íµ÷ÓÃÒ»´ÎÕâ¸öº¯Êı£¬Ëü»á¸æËß½çÃæ£º"ÏÖÔÚµÄÊ÷³¤ÕâÑù£¬Çë°Ñ½ÚµãÒÆ¹ıÈ¥£¬ÏßÁ¬ºÃ"¡£
+// === æ ¸å¿ƒï¼šç”Ÿæˆå¸ƒå±€å¿«ç…§ ===
 void AVLLogic::snapshotLayout() {
     if (!root) return;
-
-    // 1. µİ¹é¼ÆËã×ø±ê²¢Éú³É Move Ö¸Áî + SetParent Ö¸Áî
-    // ³õÊ¼ offset ¸ø 200
+    // è®¡ç®—åæ ‡å¹¶ç”Ÿæˆ Move/SetParent æŒ‡ä»¤
     calcPosRec(root, ROOT_X, ROOT_Y, 200);
 }
 
@@ -32,15 +29,15 @@ void AVLLogic::calcPosRec(LogicNode* node, double x, double y, double offset) {
     node->x = x;
     node->y = y;
 
-    // Éú³ÉÒÆ¶¯Ö¸Áî
-    VisualCommand moveCmd(CommandType::MoveNode, node->val, 600); // 600msÒÆ¶¯¶¯»­
+    // ç§»åŠ¨æŒ‡ä»¤
+    VisualCommand moveCmd(CommandType::MoveNode, node->val, 600);
     moveCmd.pos = QPointF(x, y);
     cmds.enqueue(moveCmd);
 
-    // Éú³ÉÁ¬ÏßÖ¸Áî (¸æËß Scene£ºnode µÄ×óº¢×ÓÊÇ left->val)
+    // è¿çº¿æŒ‡ä»¤
     if (node->left) {
         VisualCommand linkCmd(CommandType::SetParent, node->left->val);
-        linkCmd.relatedId = node->val; // ×óº¢×ÓµÄ¸¸½ÚµãÊÇ node
+        linkCmd.relatedId = node->val;
         cmds.enqueue(linkCmd);
 
         double nextOffset = std::max(35.0, offset / 1.8);
@@ -57,10 +54,11 @@ void AVLLogic::calcPosRec(LogicNode* node, double x, double y, double offset) {
     }
 }
 
-// === AVL »ù´¡²Ù×÷ ===
+// === AVL åŸºç¡€æ“ä½œ ===
 int AVLLogic::height(LogicNode* n) { return n ? n->height : 0; }
 int AVLLogic::balanceFactor(LogicNode* n) { return n ? height(n->left) - height(n->right) : 0; }
 void AVLLogic::updateHeight(LogicNode* n) { if (n) n->height = 1 + std::max(height(n->left), height(n->right)); }
+LogicNode* AVLLogic::findMin(LogicNode* node) { while (node->left) node = node->left; return node; }
 
 LogicNode* AVLLogic::rotateRight(LogicNode* y) {
     LogicNode* x = y->left;
@@ -82,151 +80,125 @@ LogicNode* AVLLogic::rotateLeft(LogicNode* x) {
     return y;
 }
 
-void AVLLogic::addHighlight(int id, int duration) {
-    VisualCommand h(CommandType::HighlightNode, id, duration);
-    h.color = QColor(255, 100, 255); // ×ÏÉ«¸ßÁÁĞı×ªÖáĞÄ
-    cmds.enqueue(h);
-}
-
-void AVLLogic::addWait(int duration) {
-    cmds.enqueue(VisualCommand(CommandType::Wait, 0, duration));
-}
-
-// === ºËĞÄÒµÎñ£º²åÈë ===
-QQueue<VisualCommand> AVLLogic::insert(int val) {
-    cmds.clear();
-
-    // ¼ì²éÖØ¸´£¨ÎªÁË¼ò»¯£¬ÕâÀïÂÔ¹ıËÑË÷¶¯»­£¬Ö±½Ó¼ì²é£©
-    LogicNode* curr = root;
-    while (curr) {
-        if (curr->val == val) return cmds;
-        curr = (val < curr->val) ? curr->left : curr->right;
-    }
-
-    root = insertRec(root, val);
-
-    // È·±£×îÖÕ×´Ì¬±»Ë¢ĞÂ
-    snapshotLayout();
-    return cmds;
-}
-
-LogicNode* AVLLogic::insertRec(LogicNode* node, int val) {
-    // 1. ±ê×¼ BST ²åÈë
-    if (!node) {
-        LogicNode* newNode = new LogicNode(val);
-        // Éú³É´´½¨Ö¸Áî
-        VisualCommand createCmd(CommandType::CreateNode, val);
-        cmds.enqueue(createCmd);
-        // ¸Õ´´½¨Ê±²»ÖªµÀÎ»ÖÃ£¬snapshotLayout »áÉÔºóĞŞÕıËü
-        return newNode;
-    }
-
-    if (val < node->val) node->left = insertRec(node->left, val);
-    else if (val > node->val) node->right = insertRec(node->right, val);
-    else return node;
-
-    // ¸üĞÂ¸ß¶È
+// ç»Ÿä¸€çš„å¹³è¡¡é€»è¾‘ï¼ˆæ’å…¥å’Œåˆ é™¤å…±ç”¨ï¼‰
+LogicNode* AVLLogic::balanceNode(LogicNode* node) {
     updateHeight(node);
     int balance = balanceFactor(node);
 
-    // === Ğı×ª´¦Àí (¶à½×¶Î¶¯»­µÄºËĞÄ) ===
+    // å¦‚æœå¹³è¡¡ï¼Œç›´æ¥è¿”å›
+    if (balance >= -1 && balance <= 1) return node;
 
-    // ¸¨Öú£ºÅÄ¿ìÕÕ²¢µÈ´ı
-    auto snapAndWait = [&](int waitMs) {
-        snapshotLayout();
-        addWait(waitMs);
-        };
+    // === å…³é”®ä¿®å¤ï¼šæ£€æµ‹åˆ°ä¸å¹³è¡¡ï¼Œå…ˆæ‹å¿«ç…§ ===
+    // è¿™ä¼šè®©åˆšæ’å…¥çš„èŠ‚ç‚¹ï¼ˆä¾‹å¦‚ 3->1->2 ä¸­çš„ 2ï¼‰å…ˆç§»åŠ¨åˆ°å®ƒçš„é€»è¾‘ä½ç½®
+    // ä»è€Œè®©ç”¨æˆ·çœ‹åˆ°â€œæ­ªæ‰â€çš„æ ‘ï¼Œè€Œä¸æ˜¯ç›´æ¥è·³åˆ°é«˜äº®æ—‹è½¬
+    snapshotLayout();
+    addWait(600); // åœé¡¿ä¸€ä¸‹ï¼Œå±•ç¤ºä¸å¹³è¡¡çŠ¶æ€
 
-    // ¸¨Öú£º»Ö¸´ÑÕÉ«
+    auto snapAndWait = [&](int waitMs) { snapshotLayout(); addWait(waitMs); };
     auto restoreColor = [&](int id) {
         VisualCommand r(CommandType::HighlightNode, id, 0);
-        r.color = QColor(144, 238, 144); // Ä¬ÈÏÂÌ
+        r.color = QColor(144, 238, 144);
         cmds.enqueue(r);
         };
 
-    // Case 1: LL (ÓÒĞı)
-    if (balance > 1 && val < node->left->val) {
-        // ½×¶Î1: Õ¹Ê¾ BST ²åÈëºóµÄ²»Æ½ºâ×´Ì¬ (Í¼1)
-        snapAndWait(500);
-
-        // ½×¶Î2: ¸ßÁÁ²¢Ğı×ª
+    // LL
+    if (balance > 1 && balanceFactor(node->left) >= 0) {
         addHighlight(node->val);
-        addWait(500);
-
         node = rotateRight(node);
-
-        // ½×¶Î3: Ğı×ªºó (Í¼3£¬LLÊÇÒ»²½µ½Î»µÄ)
         snapAndWait(800);
-        restoreColor(node->right->val); // Ô­À´µÄ node ±ä³ÉÁËÓÒº¢×Ó
+        restoreColor(node->right->val);
     }
-    // Case 2: RR (×óĞı)
-    else if (balance < -1 && val > node->right->val) {
-        snapAndWait(500);
+    // LR
+    else if (balance > 1 && balanceFactor(node->left) < 0) {
+        // é˜¶æ®µ1ï¼šå·¦æ—‹å·¦å­èŠ‚ç‚¹
+        addHighlight(node->left->val);
+        node->left = rotateLeft(node->left);
+        snapAndWait(600); // å±•ç¤ºä¸­é—´æ€ (3->2->1)
+        restoreColor(node->left->left->val);
 
+        // é˜¶æ®µ2ï¼šå³æ—‹å½“å‰èŠ‚ç‚¹
         addHighlight(node->val);
-        addWait(500);
-
+        node = rotateRight(node);
+        snapAndWait(800); // å±•ç¤ºæœ€ç»ˆæ€ (2->1,3)
+        restoreColor(node->right->val);
+    }
+    // RR
+    else if (balance < -1 && balanceFactor(node->right) <= 0) {
+        addHighlight(node->val);
         node = rotateLeft(node);
-
         snapAndWait(800);
         restoreColor(node->left->val);
     }
-    // Case 3: LR (ÏÈ×óĞı×ó×ÓÊ÷£¬ÔÙÓÒĞı×Ô¼º) - ÄãµÄÀı×Ó (3, 1, 2)
-    else if (balance > 1 && val > node->left->val) {
-        // ½×¶Î1: ´ËÊ±Ê÷½á¹¹ÊÇ 3->1->2 (Í¼1)
-        snapAndWait(500);
-
-        // --- ×Ó½×¶Î 1: ×óĞı×ó×ÓÊ÷ (1) ---
-        addHighlight(node->left->val); // ¸ßÁÁ 1
-        addWait(500);
-
-        node->left = rotateLeft(node->left); // Âß¼­±ä³É 3->2->1
-
-        // ½×¶Î2: Ë¢ĞÂÊÓÍ¼ (Í¼2)
-        snapAndWait(800);
-        restoreColor(node->left->left->val); // »Ö¸´ 1 µÄÑÕÉ« (ËüÏÖÔÚÊÇ 2 µÄ×óº¢×Ó)
-
-        // --- ×Ó½×¶Î 2: ÓÒĞıµ±Ç°½Úµã (3) ---
-        addHighlight(node->val); // ¸ßÁÁ 3
-        addWait(500);
-
-        node = rotateRight(node); // Âß¼­±ä³É 2->(1,3)
-
-        // ½×¶Î3: ×îÖÕ×´Ì¬ (Í¼3)
-        snapAndWait(800);
-        restoreColor(node->right->val); // »Ö¸´ 3 µÄÑÕÉ«
-    }
-    // Case 4: RL (ÏÈÓÒĞıÓÒ×ÓÊ÷£¬ÔÙ×óĞı×Ô¼º)
-    else if (balance < -1 && val < node->right->val) {
-        snapAndWait(500);
-
-        // ×Ó½×¶Î 1
+    // RL
+    else if (balance < -1 && balanceFactor(node->right) > 0) {
+        // é˜¶æ®µ1ï¼šå³æ—‹å³å­èŠ‚ç‚¹
         addHighlight(node->right->val);
-        addWait(500);
-
         node->right = rotateRight(node->right);
-
-        snapAndWait(800); // ÖĞ¼äÌ¬
+        snapAndWait(600);
         restoreColor(node->right->right->val);
 
-        // ×Ó½×¶Î 2
+        // é˜¶æ®µ2ï¼šå·¦æ—‹å½“å‰èŠ‚ç‚¹
         addHighlight(node->val);
-        addWait(500);
-
         node = rotateLeft(node);
-
-        snapAndWait(800); // ×îÖÕÌ¬
+        snapAndWait(800);
         restoreColor(node->left->val);
     }
 
     return node;
 }
 
-// É¾³ıºÍ²éÕÒÂß¼­¼òµ¥ÊµÏÖ¿ò¼Ü
+// === è¾…åŠ©æŒ‡ä»¤ ===
+void AVLLogic::addHighlight(int id, int duration, QColor c) {
+    VisualCommand h(CommandType::HighlightNode, id, duration);
+    h.color = c;
+    cmds.enqueue(h);
+    // å¦‚æœæœ‰æŒç»­æ—¶é—´ï¼Œåˆ™åŠ ä¸€ä¸ª Wait æŒ‡ä»¤é˜»å¡åç»­åŠ¨ä½œ
+    if (duration > 0) addWait(duration);
+}
+
+void AVLLogic::addWait(int duration) {
+    cmds.enqueue(VisualCommand(CommandType::Wait, 0, duration));
+}
+
+void AVLLogic::addUpdateText(const QString& text) {
+    VisualCommand cmd(CommandType::UpdateResultText, 0, 0);
+    cmd.text = text;
+    cmds.enqueue(cmd);
+}
+
+// =======================
+// === 1. æ’å…¥ (Insert) ===
+// =======================
+QQueue<VisualCommand> AVLLogic::insert(int val) {
+    cmds.clear();
+    // ç®€å•æ’é‡
+    LogicNode* curr = root;
+    while (curr) { if (curr->val == val) return cmds; curr = (val < curr->val) ? curr->left : curr->right; }
+
+    root = insertRec(root, val);
+    snapshotLayout(); // æœ€ç»ˆç¡®è®¤
+    return cmds;
+}
+
+LogicNode* AVLLogic::insertRec(LogicNode* node, int val) {
+    if (!node) {
+        LogicNode* newNode = new LogicNode(val);
+        cmds.enqueue(VisualCommand(CommandType::CreateNode, val));
+        return newNode;
+    }
+    if (val < node->val) node->left = insertRec(node->left, val);
+    else if (val > node->val) node->right = insertRec(node->right, val);
+    else return node;
+
+    // å¹³è¡¡ä¿®å¤
+    return balanceNode(node);
+}
+
+// =======================
+// === 2. åˆ é™¤ (Remove) ===
+// =======================
 QQueue<VisualCommand> AVLLogic::remove(int val) {
     cmds.clear();
-    // ¼òµ¥ÊµÏÖ£ºÕÒµ½²¢É¾³ı
-    // ÈôÒªÖ§³ÖÉ¾³ıÆ½ºâ£¬Âß¼­Í¬ insertRec
     root = removeRec(root, val);
     snapshotLayout();
     return cmds;
@@ -234,28 +206,115 @@ QQueue<VisualCommand> AVLLogic::remove(int val) {
 
 LogicNode* AVLLogic::removeRec(LogicNode* node, int val) {
     if (!node) return nullptr;
-    if (val < node->val) node->left = removeRec(node->left, val);
-    else if (val > node->val) node->right = removeRec(node->right, val);
-    else {
-        // ÕÒµ½½Úµã£¬Éú³ÉÉ¾³ıÖ¸Áî
-        // ¼ò»¯£ºÊ¹ÓÃÌæ»»·¨É¾³ı£¬ÕâÀïÎªÁË´úÂë¶ÌÊ¡ÂÔÏ¸½Ú£¬²Î¿¼Ô­ Treescene
-        // ÖØµãÊÇÃ¿´Î±ä¶¯¶¼Òª snapshotLayout()
-        // ...
-        return nullptr; // Õ¼Î»
+
+    if (val < node->val) {
+        node->left = removeRec(node->left, val);
     }
-    // É¾³ıºóµÄÆ½ºâÂß¼­Í¬ Insert
-    return node;
+    else if (val > node->val) {
+        node->right = removeRec(node->right, val);
+    }
+    else {
+        // === æ‰¾åˆ°èŠ‚ç‚¹ï¼Œå‡†å¤‡åˆ é™¤ ===
+        addHighlight(node->val, 300, Qt::red);
+
+        // Case 1: å¶å­æˆ–å•å­èŠ‚ç‚¹
+        if (!node->left || !node->right) {
+            LogicNode* temp = node->left ? node->left : node->right;
+            cmds.enqueue(VisualCommand(CommandType::RemoveNode, node->val));
+            if (!temp) {
+                node = nullptr;
+            }
+            else {
+                node = temp;
+            }
+        }
+        else {
+            // Case 2: åŒå­èŠ‚ç‚¹
+            LogicNode* temp = findMin(node->right);
+            addHighlight(temp->val, 300, Qt::yellow);
+
+            // è§†è§‰ç§»é™¤æ—§èŠ‚ç‚¹
+            cmds.enqueue(VisualCommand(CommandType::RemoveNode, node->val));
+            // é€»è¾‘å€¼æ›¿æ¢
+            node->val = temp->val;
+            // é€’å½’åˆ é™¤
+            node->right = removeRec(node->right, temp->val);
+        }
+    }
+
+    if (!node) return nullptr;
+    return balanceNode(node);
 }
 
+// =======================
+// === 3. æŸ¥æ‰¾ (Search) ===
+// =======================
 QQueue<VisualCommand> AVLLogic::search(int val) {
     cmds.clear();
     LogicNode* curr = root;
     while (curr) {
-        VisualCommand hl(CommandType::SearchHighlight, curr->val, 300);
-        cmds.enqueue(hl);
-        cmds.enqueue(VisualCommand(CommandType::Wait, 0, 300)); // ×ßÒ»²½Í£Ò»ÏÂ
-        if (val == curr->val) break;
+        VisualCommand cmd(CommandType::SearchHighlight, curr->val, 300);
+        cmds.enqueue(cmd);
+        addWait(200);
+
+        if (val == curr->val) {
+            addHighlight(curr->val, 500, Qt::green);
+            VisualCommand r(CommandType::HighlightNode, curr->val, 0);
+            r.color = QColor(144, 238, 144);
+            cmds.enqueue(r);
+            return cmds;
+        }
         curr = (val < curr->val) ? curr->left : curr->right;
     }
     return cmds;
+}
+
+// =======================
+// === 4. éå† (Traverse) ===
+// =======================
+QQueue<VisualCommand> AVLLogic::traverse(int type) {
+    cmds.clear();
+    m_traverseStr = (type == 0) ? "å‰åº: " : (type == 1 ? "ä¸­åº: " : "ååº: ");
+    addUpdateText(m_traverseStr); // åˆå§‹åŒ–æ–‡å­—
+
+    if (type == 0) preOrder(root);
+    else if (type == 1) inOrder(root);
+    else if (type == 2) postOrder(root);
+    return cmds;
+}
+
+void AVLLogic::preOrder(LogicNode* node) {
+    if (!node) return;
+
+    // è®¿é—®
+    addHighlight(node->val, 400, QColor(255, 165, 0));
+    m_traverseStr += QString::number(node->val) + " ";
+    addUpdateText(m_traverseStr);
+    addHighlight(node->val, 0, QColor(144, 238, 144)); // æ¢å¤
+
+    preOrder(node->left);
+    preOrder(node->right);
+}
+
+void AVLLogic::inOrder(LogicNode* node) {
+    if (!node) return;
+    inOrder(node->left);
+
+    addHighlight(node->val, 400, QColor(255, 165, 0));
+    m_traverseStr += QString::number(node->val) + " ";
+    addUpdateText(m_traverseStr);
+    addHighlight(node->val, 0, QColor(144, 238, 144));
+
+    inOrder(node->right);
+}
+
+void AVLLogic::postOrder(LogicNode* node) {
+    if (!node) return;
+    postOrder(node->left);
+    postOrder(node->right);
+
+    addHighlight(node->val, 400, QColor(255, 165, 0));
+    m_traverseStr += QString::number(node->val) + " ";
+    addUpdateText(m_traverseStr);
+    addHighlight(node->val, 0, QColor(144, 238, 144));
 }

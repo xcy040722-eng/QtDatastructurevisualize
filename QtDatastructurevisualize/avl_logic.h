@@ -2,6 +2,7 @@
 #include "avl_defs.h"
 #include <QQueue>
 #include <algorithm>
+#include <QString>
 
 // 纯逻辑节点
 struct LogicNode {
@@ -23,14 +24,17 @@ public:
 
     void reset();
 
-    // 外部接口：执行操作并返回一系列可视化指令
+    // === 核心接口 ===
     QQueue<VisualCommand> insert(int val);
     QQueue<VisualCommand> remove(int val);
     QQueue<VisualCommand> search(int val);
+    // type: 0=Pre, 1=In, 2=Post
+    QQueue<VisualCommand> traverse(int type);
 
 private:
     LogicNode* root;
-    QQueue<VisualCommand> cmds; // 当前累积的指令队列
+    QQueue<VisualCommand> cmds; // 指令缓冲
+    QString m_traverseStr;      // === 新增：用于构建遍历结果字符串 ===
 
     // 布局常量
     const double ROOT_X = 500;
@@ -40,24 +44,30 @@ private:
     // --- 内部算法 ---
     void freeTree(LogicNode* node);
 
-    // 递归操作
+    // 递归逻辑
     LogicNode* insertRec(LogicNode* node, int val);
     LogicNode* removeRec(LogicNode* node, int val);
+
+    // 遍历逻辑
+    void preOrder(LogicNode* node);
+    void inOrder(LogicNode* node);
+    void postOrder(LogicNode* node);
 
     // AVL 基础
     int height(LogicNode* n);
     int balanceFactor(LogicNode* n);
     void updateHeight(LogicNode* n);
+    LogicNode* balanceNode(LogicNode* node); // 平衡逻辑
     LogicNode* rotateRight(LogicNode* y);
     LogicNode* rotateLeft(LogicNode* x);
     LogicNode* findMin(LogicNode* node);
 
-    // --- 关键：快照生成 ---
-    // 生成当前整棵树的 MoveNode 和 SetParent 指令
+    // --- 快照与指令生成 ---
     void snapshotLayout();
     void calcPosRec(LogicNode* node, double x, double y, double offset);
 
-    // 辅助：生成高亮指令
-    void addHighlight(int id, int duration = 500);
+    // 辅助指令生成
+    void addHighlight(int id, int duration = 500, QColor c = QColor(255, 100, 255));
     void addWait(int duration);
+    void addUpdateText(const QString& text); // === 新增 ===
 };

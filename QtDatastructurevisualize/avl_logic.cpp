@@ -88,11 +88,9 @@ LogicNode* AVLLogic::balanceNode(LogicNode* node) {
     // 如果平衡，直接返回
     if (balance >= -1 && balance <= 1) return node;
 
-    // === 关键修复：检测到不平衡，先拍快照 ===
-    // 这会让刚插入的节点（例如 3->1->2 中的 2）先移动到它的逻辑位置
-    // 从而让用户看到“歪掉”的树，而不是直接跳到高亮旋转
+    // 检测到不平衡，先拍快照，让之前的操作（如插入）先"落位"
     snapshotLayout();
-    addWait(600); // 停顿一下，展示不平衡状态
+    addWait(600);
 
     auto snapAndWait = [&](int waitMs) { snapshotLayout(); addWait(waitMs); };
     auto restoreColor = [&](int id) {
@@ -110,16 +108,14 @@ LogicNode* AVLLogic::balanceNode(LogicNode* node) {
     }
     // LR
     else if (balance > 1 && balanceFactor(node->left) < 0) {
-        // 阶段1：左旋左子节点
         addHighlight(node->left->val);
         node->left = rotateLeft(node->left);
-        snapAndWait(600); // 展示中间态 (3->2->1)
+        snapAndWait(600);
         restoreColor(node->left->left->val);
 
-        // 阶段2：右旋当前节点
         addHighlight(node->val);
         node = rotateRight(node);
-        snapAndWait(800); // 展示最终态 (2->1,3)
+        snapAndWait(800);
         restoreColor(node->right->val);
     }
     // RR
@@ -131,13 +127,11 @@ LogicNode* AVLLogic::balanceNode(LogicNode* node) {
     }
     // RL
     else if (balance < -1 && balanceFactor(node->right) > 0) {
-        // 阶段1：右旋右子节点
         addHighlight(node->right->val);
         node->right = rotateRight(node->right);
         snapAndWait(600);
         restoreColor(node->right->right->val);
 
-        // 阶段2：左旋当前节点
         addHighlight(node->val);
         node = rotateLeft(node);
         snapAndWait(800);
@@ -152,7 +146,6 @@ void AVLLogic::addHighlight(int id, int duration, QColor c) {
     VisualCommand h(CommandType::HighlightNode, id, duration);
     h.color = c;
     cmds.enqueue(h);
-    // 如果有持续时间，则加一个 Wait 指令阻塞后续动作
     if (duration > 0) addWait(duration);
 }
 
@@ -176,7 +169,7 @@ QQueue<VisualCommand> AVLLogic::insert(int val) {
     while (curr) { if (curr->val == val) return cmds; curr = (val < curr->val) ? curr->left : curr->right; }
 
     root = insertRec(root, val);
-    snapshotLayout(); // 最终确认
+    snapshotLayout();
     return cmds;
 }
 
@@ -190,7 +183,6 @@ LogicNode* AVLLogic::insertRec(LogicNode* node, int val) {
     else if (val > node->val) node->right = insertRec(node->right, val);
     else return node;
 
-    // 平衡修复
     return balanceNode(node);
 }
 
@@ -207,6 +199,11 @@ QQueue<VisualCommand> AVLLogic::remove(int val) {
 LogicNode* AVLLogic::removeRec(LogicNode* node, int val) {
     if (!node) return nullptr;
 
+    // === 1. 探针动画：每下一层，生成一个探针移动指令 ===
+    VisualCommand probe(CommandType::SearchHighlight, node->val, 300);
+    cmds.enqueue(probe);
+    addWait(200); // 稍微停顿，让探针走一会
+
     if (val < node->val) {
         node->left = removeRec(node->left, val);
     }
@@ -214,13 +211,16 @@ LogicNode* AVLLogic::removeRec(LogicNode* node, int val) {
         node->right = removeRec(node->right, val);
     }
     else {
-        // === 找到节点，准备删除 ===
-        addHighlight(node->val, 300, Qt::red);
+        // === 2. 找到节点：高亮红色 ===
+        addHighlight(node->val, 400, Qt::red);
 
         // Case 1: 叶子或单子节点
         if (!node->left || !node->right) {
             LogicNode* temp = node->left ? node->left : node->right;
+
+            // === 3. 节点淡出 (RemoveNode) ===
             cmds.enqueue(VisualCommand(CommandType::RemoveNode, node->val));
+
             if (!temp) {
                 node = nullptr;
             }
@@ -230,14 +230,22 @@ LogicNode* AVLLogic::removeRec(LogicNode* node, int val) {
         }
         else {
             // Case 2: 双子节点
+            // 这里我们不需要给 findMin 加动画，因为用户关注的是"当前节点被删除了"
             LogicNode* temp = findMin(node->right);
+
+            // 高亮替代者
             addHighlight(temp->val, 300, Qt::yellow);
 
-            // 视觉移除旧节点
-            cmds.enqueue(VisualCommand(CommandType::RemoveNode, node->val));
-            // 逻辑值替换
-            node->val = temp->val;
-            // 递归删除
+            // 视觉技巧：移除当前节点(旧值)，然后稍后 snapshot 会把替代者(temp)瞬移过来
+            // 或者更平滑：把当前节点值变了？
+            // 鉴于我们的指令集限制，最稳妥的是：移除旧的 visual node，然后逻辑上 ID 变了
+            // 新的 snapshotLayout 会为新 ID 创建位置。
+
+            cmds.enqueue(VisualCommand(CommandType::RemoveNode, node->val)); // 移除红色的 node
+
+            node->val = temp->val; // 逻辑值替换
+
+            // 递归删除原来的 temp
             node->right = removeRec(node->right, temp->val);
         }
     }
@@ -275,7 +283,7 @@ QQueue<VisualCommand> AVLLogic::search(int val) {
 QQueue<VisualCommand> AVLLogic::traverse(int type) {
     cmds.clear();
     m_traverseStr = (type == 0) ? "前序: " : (type == 1 ? "中序: " : "后序: ");
-    addUpdateText(m_traverseStr); // 初始化文字
+    addUpdateText(m_traverseStr);
 
     if (type == 0) preOrder(root);
     else if (type == 1) inOrder(root);
@@ -286,11 +294,17 @@ QQueue<VisualCommand> AVLLogic::traverse(int type) {
 void AVLLogic::preOrder(LogicNode* node) {
     if (!node) return;
 
-    // 访问
+    // 访问动画
     addHighlight(node->val, 400, QColor(255, 165, 0));
-    m_traverseStr += QString::number(node->val) + " ";
+
+    // === 格式化文字：加箭头 ===
+    if (!m_traverseStr.endsWith(": ")) {
+        m_traverseStr += " -> ";
+    }
+    m_traverseStr += QString::number(node->val);
     addUpdateText(m_traverseStr);
-    addHighlight(node->val, 0, QColor(144, 238, 144)); // 恢复
+
+    addHighlight(node->val, 0, QColor(144, 238, 144)); // 恢复绿
 
     preOrder(node->left);
     preOrder(node->right);
@@ -301,8 +315,13 @@ void AVLLogic::inOrder(LogicNode* node) {
     inOrder(node->left);
 
     addHighlight(node->val, 400, QColor(255, 165, 0));
-    m_traverseStr += QString::number(node->val) + " ";
+
+    if (!m_traverseStr.endsWith(": ")) {
+        m_traverseStr += " -> ";
+    }
+    m_traverseStr += QString::number(node->val);
     addUpdateText(m_traverseStr);
+
     addHighlight(node->val, 0, QColor(144, 238, 144));
 
     inOrder(node->right);
@@ -314,7 +333,12 @@ void AVLLogic::postOrder(LogicNode* node) {
     postOrder(node->right);
 
     addHighlight(node->val, 400, QColor(255, 165, 0));
-    m_traverseStr += QString::number(node->val) + " ";
+
+    if (!m_traverseStr.endsWith(": ")) {
+        m_traverseStr += " -> ";
+    }
+    m_traverseStr += QString::number(node->val);
     addUpdateText(m_traverseStr);
+
     addHighlight(node->val, 0, QColor(144, 238, 144));
 }
